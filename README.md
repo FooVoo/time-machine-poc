@@ -6,13 +6,28 @@ A Svelte-based web component for viewing, filtering, and analyzing WebSocket mes
 
 - 🔌 **WebSocket Connection Management**: Connect to any WebSocket server (view-only mode)
 - 📝 **Message Capture**: Auto-capture incoming messages
-- 🔍 **Filter by Request ID**: Filter messages by requestId field
+- 🔍 **Advanced Filtering**: 
+  - Filter by Request ID
+  - Custom field filtering with autocomplete (supports nested fields like `data.user.name`)
 - 📊 **Group by Request ID**: Group related request/response pairs by their requestId
+- 📖 **JSON Viewer**: Expandable JSON viewer with syntax highlighting for message inspection
 - 💾 **Export Messages**: Save captured messages as JSON files
 - 📂 **Import Messages**: Load previously saved message sessions
 - 🎨 **Modern UI**: Clean, intuitive interface with real-time status updates
 - 🧩 **Web Component**: Built as a custom element for easy integration
-- ⚡ **High Performance**: Optimized to handle large datasets (5-10MB, thousands of messages)
+- ⚡ **High Performance**: Optimized to handle large datasets (5-10MB, 10,000+ messages)
+- 📄 **Example Data**: Includes 2,000+ sample messages for testing
+
+## Quick Start
+
+### Try with Example Data
+
+1. Open `demo.html` in your browser
+2. Click **"Import Messages"**
+3. Select `example-messages.json` from the repository
+4. Explore 2,000+ sample messages with all features enabled
+
+See [EXAMPLE_MESSAGES.md](./EXAMPLE_MESSAGES.md) for detailed information about the example data and how to use it.
 
 ## Installation
 
