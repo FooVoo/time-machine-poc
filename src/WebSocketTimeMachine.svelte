@@ -22,6 +22,7 @@
   let primitiveFields = new Set(); // Tracks which fields have primitive values
   let fieldValues = new Map(); // Maps field paths to their unique primitive values
   let expandedMessages = $state(new Set());
+  let expandedNestedPaths = $state(new Map()); // Tracks expanded paths within messages
 
   let availableFields = $derived.by(() => getAllFieldPaths(messages));
   let fieldIsFilterable = $derived(primitiveFields.has(customFilterField));
@@ -230,10 +231,36 @@
   function toggleMessageExpansion(index) {
     if (expandedMessages.has(index)) {
       expandedMessages.delete(index);
+      // Clear nested expansions for this message
+      expandedNestedPaths.delete(index);
     } else {
       expandedMessages.add(index);
+      // Initialize nested paths map for this message
+      if (!expandedNestedPaths.has(index)) {
+        expandedNestedPaths.set(index, new Set());
+      }
     }
     expandedMessages = expandedMessages;
+    expandedNestedPaths = expandedNestedPaths;
+  }
+
+  // Toggle nested path expansion within a message
+  function toggleNestedPath(messageIndex, path) {
+    if (!expandedNestedPaths.has(messageIndex)) {
+      expandedNestedPaths.set(messageIndex, new Set());
+    }
+    const paths = expandedNestedPaths.get(messageIndex);
+    if (paths.has(path)) {
+      paths.delete(path);
+    } else {
+      paths.add(path);
+    }
+    expandedNestedPaths = expandedNestedPaths;
+  }
+
+  // Check if nested path is expanded
+  function isNestedPathExpanded(messageIndex, path) {
+    return expandedNestedPaths.get(messageIndex)?.has(path) || false;
   }
 
   // Format value for display (handle different types)
@@ -243,6 +270,26 @@
     if (typeof value === 'string') return value;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
     return JSON.stringify(value, null, 2);
+  }
+
+  // Get type of value for display
+  function getValueType(value) {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (Array.isArray(value)) return 'array';
+    return typeof value;
+  }
+
+  // Get display preview for complex values
+  function getValuePreview(value) {
+    if (Array.isArray(value)) {
+      return `Array(${value.length})`;
+    }
+    if (typeof value === 'object' && value !== null) {
+      const keys = Object.keys(value);
+      return `Object {${keys.length} ${keys.length === 1 ? 'property' : 'properties'}}`;
+    }
+    return formatValue(value);
   }
 
   function groupMessagesByRequestId(msgs) {
@@ -377,6 +424,82 @@
     currentPage = Math.max(0, totalPages - 1);
   }
 </script>
+
+{#snippet nestedDataViewer(data, messageIndex, path = '')}
+  <div class="nested-data">
+    {#if Array.isArray(data)}
+      {#each data as item, index}
+        {@const itemPath = `${path}[${index}]`}
+        {@const itemType = getValueType(item)}
+        {@const isComplex = itemType === 'object' || itemType === 'array'}
+        {@const isExpanded = isNestedPathExpanded(messageIndex, itemPath)}
+        
+        <div class="nested-item">
+          <div class="nested-key">
+            {#if isComplex}
+              <button 
+                class="nested-toggle" 
+                onclick={() => toggleNestedPath(messageIndex, itemPath)}
+                title={isExpanded ? 'Свернуть' : 'Развернуть'}
+              >
+                {isExpanded ? '▼' : '▶'}
+              </button>
+            {:else}
+              <span class="nested-no-toggle"></span>
+            {/if}
+            <span class="nested-index">[{index}]:</span>
+            {#if !isExpanded && isComplex}
+              <span class="nested-preview">{getValuePreview(item)}</span>
+            {/if}
+          </div>
+          {#if isExpanded && isComplex}
+            <div class="nested-children">
+              {@render nestedDataViewer(item, messageIndex, itemPath)}
+            </div>
+          {:else if !isComplex}
+            <span class="nested-value nested-value-{itemType}">{formatValue(item)}</span>
+          {/if}
+        </div>
+      {/each}
+    {:else if typeof data === 'object' && data !== null}
+      {#each Object.entries(data) as [key, value]}
+        {@const itemPath = path ? `${path}.${key}` : key}
+        {@const itemType = getValueType(value)}
+        {@const isComplex = itemType === 'object' || itemType === 'array'}
+        {@const isExpanded = isNestedPathExpanded(messageIndex, itemPath)}
+        
+        <div class="nested-item">
+          <div class="nested-key">
+            {#if isComplex}
+              <button 
+                class="nested-toggle" 
+                onclick={() => toggleNestedPath(messageIndex, itemPath)}
+                title={isExpanded ? 'Свернуть' : 'Развернуть'}
+              >
+                {isExpanded ? '▼' : '▶'}
+              </button>
+            {:else}
+              <span class="nested-no-toggle"></span>
+            {/if}
+            <span class="nested-property">{key}:</span>
+            {#if !isExpanded && isComplex}
+              <span class="nested-preview">{getValuePreview(value)}</span>
+            {/if}
+          </div>
+          {#if isExpanded && isComplex}
+            <div class="nested-children">
+              {@render nestedDataViewer(value, messageIndex, itemPath)}
+            </div>
+          {:else if !isComplex}
+            <span class="nested-value nested-value-{itemType}">{formatValue(value)}</span>
+          {/if}
+        </div>
+      {/each}
+    {:else}
+      <span class="nested-value nested-value-{getValueType(data)}">{formatValue(data)}</span>
+    {/if}
+  </div>
+{/snippet}
 
 <div class="container">
   <div class="header">
@@ -531,7 +654,7 @@
 
                   {#if isExpanded && parsedData}
                     <div class="json-viewer">
-                      <pre class="json-content">{JSON.stringify(parsedData, null, 2)}</pre>
+                      {@render nestedDataViewer(parsedData, globalIndex)}
                     </div>
                   {:else if isExpanded && !parsedData}
                     <div class="message-data primitive">
@@ -597,7 +720,7 @@
 
             {#if isExpanded && parsedData}
               <div class="json-viewer">
-                <pre class="json-content">{JSON.stringify(parsedData, null, 2)}</pre>
+                {@render nestedDataViewer(parsedData, globalIndex)}
               </div>
             {:else if isExpanded && !parsedData}
               <div class="message-data primitive">
@@ -1017,5 +1140,104 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+
+  /* Nested Data Viewer Styles */
+  .nested-data {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 8px;
+  }
+
+  .nested-item {
+    display: flex;
+    flex-direction: column;
+    margin-left: 0;
+  }
+
+  .nested-key {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+  }
+
+  .nested-toggle {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #666;
+    flex-shrink: 0;
+  }
+
+  .nested-toggle:hover {
+    color: #333;
+    background: #f0f0f0;
+    border-radius: 2px;
+  }
+
+  .nested-no-toggle {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .nested-property {
+    color: #881391;
+    font-weight: 500;
+  }
+
+  .nested-index {
+    color: #1976d2;
+    font-weight: 500;
+  }
+
+  .nested-preview {
+    color: #666;
+    font-style: italic;
+    margin-left: 4px;
+  }
+
+  .nested-value {
+    margin-left: 4px;
+    word-break: break-word;
+  }
+
+  .nested-value-string {
+    color: #c41a16;
+  }
+
+  .nested-value-number {
+    color: #1976d2;
+  }
+
+  .nested-value-boolean {
+    color: #0d47a1;
+    font-weight: 500;
+  }
+
+  .nested-value-null {
+    color: #999;
+    font-style: italic;
+  }
+
+  .nested-value-undefined {
+    color: #999;
+    font-style: italic;
+  }
+
+  .nested-children {
+    margin-left: 20px;
+    border-left: 1px solid #e0e0e0;
+    padding-left: 8px;
   }
 </style>
