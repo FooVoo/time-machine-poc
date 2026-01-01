@@ -1,7 +1,7 @@
 <svelte:options customElement="websocket-time-machine" />
 
 <script>
-  let wsUrl = 'ws://localhost:8080';
+  let wsUrl = '';
   let ws = null;
   let isConnected = false;
   let messages = [];
