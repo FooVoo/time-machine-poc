@@ -66,6 +66,17 @@ export class WsMessageViewerService {
     }
 
     /**
+     * Parse message data with error handling
+     */
+    private parseMessageData(msg: TimeMachineMessage): any {
+        try {
+            return JSON.parse(msg.data);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * Filter messages by requestId
      */
     filterByRequestId(requestId: string): TimeMachineMessage[] {
@@ -74,12 +85,8 @@ export class WsMessageViewerService {
         }
         
         return this._messageHistory.filter(msg => {
-            try {
-                const data = JSON.parse(msg.data);
-                return data.requestId && data.requestId.includes(requestId);
-            } catch {
-                return false;
-            }
+            const data = this.parseMessageData(msg);
+            return data && data.requestId && data.requestId.includes(requestId);
         });
     }
 
@@ -92,18 +99,14 @@ export class WsMessageViewerService {
         const groups = new Map<string, TimeMachineMessage[]>();
         
         for (const msg of msgs) {
-            try {
-                const data = JSON.parse(msg.data);
-                const requestId = data.requestId;
-                
-                if (requestId) {
-                    if (!groups.has(requestId)) {
-                        groups.set(requestId, []);
-                    }
-                    groups.get(requestId)!.push(msg);
+            const data = this.parseMessageData(msg);
+            const requestId = data?.requestId;
+            
+            if (requestId) {
+                if (!groups.has(requestId)) {
+                    groups.set(requestId, []);
                 }
-            } catch {
-                // Skip messages that can't be parsed
+                groups.get(requestId)!.push(msg);
             }
         }
         

@@ -16,15 +16,20 @@
   let currentPage = 0;
   let messagesPerPage = 50;
   
+  // Parse message data once and cache it
+  function parseMessageData(msg) {
+    try {
+      return typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+    } catch {
+      return null;
+    }
+  }
+  
   // Computed values for filtering and grouping
   $: filteredMessages = filterRequestId 
     ? messages.filter(msg => {
-        try {
-          const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
-          return data.requestId && data.requestId.includes(filterRequestId);
-        } catch {
-          return false;
-        }
+        const data = parseMessageData(msg);
+        return data && data.requestId && data.requestId.includes(filterRequestId);
       })
     : messages;
   
@@ -43,18 +48,14 @@
     const groups = new Map();
     
     for (const msg of msgs) {
-      try {
-        const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
-        const requestId = data.requestId;
-        
-        if (requestId) {
-          if (!groups.has(requestId)) {
-            groups.set(requestId, []);
-          }
-          groups.get(requestId).push(msg);
+      const data = parseMessageData(msg);
+      const requestId = data?.requestId;
+      
+      if (requestId) {
+        if (!groups.has(requestId)) {
+          groups.set(requestId, []);
         }
-      } catch {
-        // Skip messages that can't be parsed
+        groups.get(requestId).push(msg);
       }
     }
     
