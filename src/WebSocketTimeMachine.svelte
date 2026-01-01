@@ -13,17 +13,27 @@
   let groupByRequestId = $state(false);
   let customFilterField = $state('');
   let customFilterValue = $state('');
-  let availableFields = $derived(() => getAllFieldPaths(messages));
-  let fieldIsFilterable = $derived(() => primitiveFields.has(customFilterField));
-  let availableValues = $derived(() => {
-    if (!fieldIsFilterable()) return [];
+
+  // Pagination state
+  let currentPage = $state(0);
+  let messagesPerPage = $state(50);
+
+
+  let primitiveFields = new Set(); // Tracks which fields have primitive values
+  let fieldValues = new Map(); // Maps field paths to their unique primitive values
+  let expandedMessages = $state(new Set());
+
+  let availableFields = $derived.by(() => getAllFieldPaths(messages));
+  let fieldIsFilterable = $derived(primitiveFields.has(customFilterField));
+  let availableValues = $derived.by(() => {
+    if (!fieldIsFilterable) return [];
 
     if (!fieldValues.has(customFilterField)) return [];
 
     return Array.from(fieldValues.get(customFilterField)).sort();
   });
 
-  let filteredByRequestId = $derived(() => {
+  let filteredByRequestId = $derived.by(() => {
     if (!filterRequestId) return messages;
 
     return messages.filter(msg => {
@@ -32,38 +42,21 @@
             });
   });
 
-  let filteredMessages = $derived(() => {
-    return filterByCustomField(filteredByRequestId());
-  });
+  let filteredMessages = $derived(filterByCustomField(filteredByRequestId));
 
-  let groupedMessages = $derived(() => {
+  let groupedMessages = $derived.by(() => {
     if (!groupByRequestId) return null;
 
     return groupMessagesByRequestId(filteredMessages());
   })
 
-  let totalPages = $derived(() => {
-    return Math.ceil(filteredMessages().length / messagesPerPage)
-  });
+  let totalPages = $derived(Math.ceil(filteredMessages().length / messagesPerPage));
 
-  let visibleMessages = $derived(() => {
-    return filteredMessages().slice(
+  let visibleMessages = $derived(filteredMessages().slice(
             currentPage * messagesPerPage,
-            (currentPage + 1) * messagesPerPage
-    );
-  });
+            (currentPage + 1) * messagesPerPage));
 
-  let startIndex = $derived(() => {
-    return currentPage * messagesPerPage;
-  });
-
-  let primitiveFields = new Set(); // Tracks which fields have primitive values
-  let fieldValues = new Map(); // Maps field paths to their unique primitive values
-  let expandedMessages = $state(new Set());
-
-  // Pagination state
-  let currentPage = $state(0);
-  let messagesPerPage = $state(50);
+  let startIndex = $derived(currentPage * messagesPerPage);
 
   // Russian pluralization constants
   const RUSSIAN_PLURAL_FORMS = {
@@ -287,7 +280,7 @@
             data: event.data
           };
           // Use push instead of spread operator for better performance
-          const wasOnLastPage = currentPage === totalPages() - 1 || messages.length === 0;
+          const wasOnLastPage = currentPage === totalPages - 1 || messages.length === 0;
           messages.push(message);
           messages = messages; // Trigger reactivity
 
@@ -369,7 +362,7 @@
   }
 
   function nextPage() {
-    if (currentPage < totalPages() - 1) {
+    if (currentPage < totalPages - 1) {
       currentPage++;
     }
   }
@@ -381,7 +374,7 @@
   }
 
   function goToLastPage() {
-    currentPage = Math.max(0, totalPages() - 1);
+    currentPage = Math.max(0, totalPages - 1);
   }
 </script>
 
@@ -452,7 +445,7 @@
             autocomplete="off"
           />
           <datalist id="field-suggestions">
-            {#each availableFields() as field}
+            {#each availableFields as field}
               <option value={field}></option>
             {/each}
           </datalist>
@@ -463,14 +456,14 @@
             id="custom-value"
             type="text"
             bind:value={customFilterValue}
-            list={fieldIsFilterable() ? "value-suggestions" : null}
+            list={fieldIsFilterable ? "value-suggestions" : null}
             placeholder="Введите значение для поиска"
-            disabled={!fieldIsFilterable()}
-            title={fieldIsFilterable() ? "Выберите значение из списка" : "Выберите поле с примитивными значениями"}
+            disabled={!fieldIsFilterable}
+            title={fieldIsFilterable ? "Выберите значение из списка" : "Выберите поле с примитивными значениями"}
           />
-          {#if fieldIsFilterable()}
+          {#if fieldIsFilterable}
             <datalist id="value-suggestions">
-              {#each availableValues() as value}
+              {#each availableValues as value}
                 <option value={value}></option>
               {/each}
             </datalist>
@@ -511,7 +504,7 @@
     {#if groupByRequestId && groupedMessages}
       <!-- Grouped view by Request ID -->
       <div class="grouped-messages">
-        {#each [...groupedMessages().entries()] as [requestId, msgs]}
+        {#each [...groupedMessages.entries()] as [requestId, msgs]}
           <div class="request-group">
             <div class="group-header">
               <strong>ID запроса:</strong> {requestId}
@@ -570,10 +563,10 @@
             Предыдущая
           </button>
           <span class="page-info">
-            Страница {currentPage + 1} из {totalPages()}
-            (показано {startIndex() + 1}-{Math.min(startIndex() + messagesPerPage, filteredMessages().length)} из {filteredMessages().length})
+            Страница {currentPage + 1} из {totalPages}
+            (показано {startIndex + 1}-{Math.min(startIndex + messagesPerPage, filteredMessages().length)} из {filteredMessages().length})
           </span>
-          <button class="btn btn-sm" onclick={nextPage} disabled={currentPage === totalPages() - 1}>
+          <button class="btn btn-sm" onclick={nextPage} disabled={currentPage === totalPages - 1}>
             Следующая
           </button>
           <button class="btn btn-sm" onclick={goToLastPage}>
@@ -584,7 +577,7 @@
 
       <div class="messages-list">
         {#each visibleMessages() as message, index}
-          {@const globalIndex = startIndex() + index}
+          {@const globalIndex = startIndex + index}
           {@const isExpanded = expandedMessages.has(globalIndex)}
           {@const parsedData = parseMessageData(message)}
 

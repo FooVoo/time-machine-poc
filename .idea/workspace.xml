@@ -4,11 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1aa425a7-994c-4f6b-839c-fb9e21766332" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.ask2agent.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/discord.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/index.html" afterDir="false" />
+    <list default="true" id="1aa425a7-994c-4f6b-839c-fb9e21766332" name="Changes" comment="fix(websocket): fix filtering issues, adjust message handling">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/WebSocketTimeMachine.svelte" beforeDir="false" afterPath="$PROJECT_DIR$/src/WebSocketTimeMachine.svelte" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -59,12 +57,22 @@
       </RecentBranches>
     </option>
   </component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/FooVoo/time-machine-poc.git&quot;,
-    &quot;accountId&quot;: &quot;2f4ec3b9-1d30-4522-b11c-445d29c2b14c&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/FooVoo/time-machine-poc.git",
+    "accountId": "2f4ec3b9-1d30-4522-b11c-445d29c2b14c"
+  },
+  "recentNewPullRequestHead": {
+    "server": {
+      "useHttp": false,
+      "host": "github.com",
+      "port": null,
+      "suffix": null
+    },
+    "owner": "FooVoo",
+    "repository": "time-machine-poc"
   }
-}</component>
+}]]></component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 3
 }</component>
@@ -82,7 +90,7 @@
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "git-widget-placeholder": "filtering-fix",
+    "git-widget-placeholder": "#2 on filtering-fix",
     "javascript.preferred.runtime.type.id": "node",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -120,12 +128,25 @@
       <option name="presentableId" value="Default" />
       <updated>1724326423443</updated>
       <workItem from="1767250461879" duration="4552000" />
-      <workItem from="1767255967488" duration="2189000" />
+      <workItem from="1767255967488" duration="3158000" />
     </task>
+    <task id="LOCAL-00001" summary="fix(websocket): fix filtering issues, adjust message handling">
+      <option name="closed" value="true" />
+      <created>1767258334008</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1767258334008</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="fix(websocket): fix filtering issues, adjust message handling" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix(websocket): fix filtering issues, adjust message handling" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>
