@@ -189,7 +189,7 @@
       
       ws.onopen = () => {
         isConnected = true;
-        statusMessage = 'Connected to ' + wsUrl;
+        statusMessage = 'Подключено к ' + wsUrl;
       };
       
       ws.onmessage = (event) => {
@@ -212,15 +212,15 @@
       };
       
       ws.onerror = (error) => {
-        statusMessage = 'WebSocket error occurred';
+        statusMessage = 'Ошибка WebSocket соединения';
       };
       
       ws.onclose = () => {
         isConnected = false;
-        statusMessage = 'Disconnected';
+        statusMessage = 'Отключено';
       };
     } catch (error) {
-      statusMessage = 'Connection failed: ' + error.message;
+      statusMessage = 'Ошибка подключения: ' + error.message;
     }
   }
 
@@ -236,7 +236,7 @@
     messages = [];
     currentPage = 0;
     filterRequestId = '';
-    statusMessage = 'Messages cleared';
+    statusMessage = 'Сообщения очищены';
   }
 
   function exportMessages() {
@@ -248,27 +248,27 @@
     link.download = `websocket-messages-${Date.now()}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    statusMessage = 'Messages exported';
+    statusMessage = 'Сообщения экспортированы';
   }
 
   function handleImport(event) {
     const file = event.target.files[0];
     if (file) {
-      statusMessage = 'Importing...';
+      statusMessage = 'Импорт...';
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const imported = JSON.parse(e.target.result);
           if (!Array.isArray(imported)) {
-            statusMessage = 'Import failed: Invalid format';
+            statusMessage = 'Ошибка импорта: Неверный формат';
             return;
           }
           
           messages = imported.slice();
           currentPage = 0;
-          statusMessage = `Imported ${messages.length} messages`;
+          statusMessage = `Импортировано ${messages.length} сообщений`;
         } catch (error) {
-          statusMessage = 'Import failed: Invalid JSON';
+          statusMessage = 'Ошибка импорта: Некорректный JSON';
         }
       };
       reader.readAsText(file);
@@ -300,13 +300,13 @@
 
 <div class="container">
   <div class="header">
-    <h1>WebSocket Time Machine</h1>
-    <p class="subtitle">Export and Import WebSocket Messages</p>
+    <h1>Машина Времени WebSocket</h1>
+    <p class="subtitle">Экспорт и Импорт WebSocket сообщений</p>
   </div>
 
   <div class="connection-panel">
     <div class="input-group">
-      <label for="ws-url">WebSocket URL:</label>
+      <label for="ws-url">URL WebSocket:</label>
       <input 
         id="ws-url"
         type="text" 
@@ -318,51 +318,51 @@
     
     <div class="button-group">
       {#if isConnected}
-        <button class="btn btn-danger" on:click={disconnect}>Disconnect</button>
+        <button class="btn btn-danger" on:click={disconnect}>Отключить</button>
       {:else}
-        <button class="btn btn-primary" on:click={connect}>Connect</button>
+        <button class="btn btn-primary" on:click={connect}>Подключить</button>
       {/if}
     </div>
 
     <div class="status">
       <span class="status-indicator" class:connected={isConnected}></span>
-      <span class="status-text">{statusMessage || (isConnected ? 'Connected' : 'Disconnected')}</span>
+      <span class="status-text">{statusMessage || (isConnected ? 'Подключено' : 'Отключено')}</span>
     </div>
   </div>
 
   <div class="capture-panel">
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={autoCapture} />
-      Auto-capture messages
+      Автоматически захватывать сообщения
     </label>
   </div>
   
   <div class="filter-panel">
     <div class="filter-section">
-      <h3>Filter by Request ID</h3>
+      <h3>Фильтр по ID запроса</h3>
       <div class="input-group">
-        <label for="filter">Request ID:</label>
+        <label for="filter">ID запроса:</label>
         <input 
           id="filter"
           type="text" 
           bind:value={filterRequestId} 
-          placeholder="Enter request ID to filter"
+          placeholder="Введите ID запроса для фильтрации"
         />
       </div>
     </div>
     
     <div class="filter-section">
-      <h3>Custom Field Filter</h3>
+      <h3>Фильтр по пользовательскому полю</h3>
       <div class="custom-filter-group">
         <div class="input-group autocomplete-container">
-          <label for="custom-field">Field:</label>
+          <label for="custom-field">Поле:</label>
           <input 
             id="custom-field"
             type="text" 
             bind:value={customFilterField}
             on:focus={() => showFieldSuggestions = true}
             on:blur={() => setTimeout(() => showFieldSuggestions = false, AUTOCOMPLETE_BLUR_DELAY)}
-            placeholder="e.g. data.userId, type, timestamp"
+            placeholder="напр. data.userId, type, timestamp"
             autocomplete="off"
           />
           {#if showFieldSuggestions && filteredFieldSuggestions.length > 0}
@@ -389,19 +389,19 @@
               {/each}
               {#if filteredFieldSuggestions.length > MAX_AUTOCOMPLETE_SUGGESTIONS}
                 <div class="autocomplete-more">
-                  +{filteredFieldSuggestions.length - MAX_AUTOCOMPLETE_SUGGESTIONS} more...
+                  +{filteredFieldSuggestions.length - MAX_AUTOCOMPLETE_SUGGESTIONS} ещё...
                 </div>
               {/if}
             </div>
           {/if}
         </div>
         <div class="input-group">
-          <label for="custom-value">Value:</label>
+          <label for="custom-value">Значение:</label>
           <input 
             id="custom-value"
             type="text" 
             bind:value={customFilterValue}
-            placeholder="Enter value to match"
+            placeholder="Введите значение для поиска"
           />
         </div>
       </div>
@@ -409,17 +409,17 @@
     
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={groupByRequestId} />
-      Group by Request ID
+      Группировать по ID запроса
     </label>
   </div>
 
   <div class="actions-panel">
     <button class="btn btn-success" on:click={exportMessages} disabled={messages.length === 0}>
-      Export Messages ({messages.length})
+      Экспортировать сообщения ({messages.length})
     </button>
     
     <label class="btn btn-info file-label">
-      Import Messages
+      Импортировать сообщения
       <input 
         type="file" 
         accept=".json" 
@@ -429,12 +429,12 @@
     </label>
     
     <button class="btn btn-warning" on:click={clearMessages} disabled={messages.length === 0}>
-      Clear Messages
+      Очистить сообщения
     </button>
   </div>
 
   <div class="messages-panel">
-    <h2>Captured Messages ({filteredMessages.length}{filterRequestId ? ` filtered from ${messages.length}` : ''})</h2>
+    <h2>Захваченные сообщения ({filteredMessages.length}{filterRequestId ? ` из ${messages.length}` : ''})</h2>
     
     {#if groupByRequestId && groupedMessages}
       <!-- Grouped view by Request ID -->
@@ -442,8 +442,8 @@
         {#each [...groupedMessages.entries()] as [requestId, msgs]}
           <div class="request-group">
             <div class="group-header">
-              <strong>Request ID:</strong> {requestId}
-              <span class="group-count">({msgs.length} messages)</span>
+              <strong>ID запроса:</strong> {requestId}
+              <span class="group-count">({msgs.length} сообщений)</span>
             </div>
             <div class="group-messages">
               {#each msgs as message, index}
@@ -458,7 +458,7 @@
                     <button 
                       class="expand-btn" 
                       on:click={() => toggleMessageExpansion(globalIndex)}
-                      title={isExpanded ? 'Collapse' : 'Expand JSON'}
+                      title={isExpanded ? 'Свернуть' : 'Развернуть JSON'}
                     >
                       {isExpanded ? '▼' : '▶'}
                     </button>
@@ -470,7 +470,7 @@
                     </div>
                   {:else if isExpanded && !parsedData}
                     <div class="message-data primitive">
-                      <span class="primitive-label">Primitive value:</span>
+                      <span class="primitive-label">Примитивное значение:</span>
                       <span class="primitive-value">{formatValue(message.data)}</span>
                     </div>
                   {:else}
@@ -487,7 +487,7 @@
             </div>
           </div>
         {:else}
-          <div class="empty-state">No messages with Request ID found</div>
+          <div class="empty-state">Не найдено сообщений с ID запроса</div>
         {/each}
       </div>
     {:else}
@@ -495,17 +495,17 @@
       {#if !groupByRequestId && displayMessages.length > messagesPerPage}
         <div class="pagination-controls">
           <button class="btn btn-sm" on:click={prevPage} disabled={currentPage === 0}>
-            Previous
+            Предыдущая
           </button>
           <span class="page-info">
-            Page {currentPage + 1} of {totalPages} 
-            (showing {startIndex + 1}-{Math.min(startIndex + messagesPerPage, displayMessages.length)} of {displayMessages.length})
+            Страница {currentPage + 1} из {totalPages} 
+            (показано {startIndex + 1}-{Math.min(startIndex + messagesPerPage, displayMessages.length)} из {displayMessages.length})
           </span>
           <button class="btn btn-sm" on:click={nextPage} disabled={currentPage === totalPages - 1}>
-            Next
+            Следующая
           </button>
           <button class="btn btn-sm" on:click={goToLastPage}>
-            Latest
+            Последняя
           </button>
         </div>
       {/if}
@@ -524,7 +524,7 @@
               <button 
                 class="expand-btn" 
                 on:click={() => toggleMessageExpansion(globalIndex)}
-                title={isExpanded ? 'Collapse' : 'Expand JSON'}
+                title={isExpanded ? 'Свернуть' : 'Развернуть JSON'}
               >
                 {isExpanded ? '▼' : '▶'}
               </button>
@@ -536,7 +536,7 @@
               </div>
             {:else if isExpanded && !parsedData}
               <div class="message-data primitive">
-                <span class="primitive-label">Primitive value:</span>
+                <span class="primitive-label">Примитивное значение:</span>
                 <span class="primitive-value">{formatValue(message.data)}</span>
               </div>
             {:else}
@@ -550,7 +550,7 @@
             {/if}
           </div>
         {:else}
-          <div class="empty-state">No messages captured yet</div>
+          <div class="empty-state">Сообщения ещё не захвачены</div>
         {/each}
       </div>
     {/if}
