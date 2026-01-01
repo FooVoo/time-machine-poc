@@ -5,10 +5,10 @@
  * Run with: node test-server.js
  */
 
-const WebSocket = require('ws');
+import { WebSocketServer } from 'ws';
 
 const PORT = 8080;
-const wss = new WebSocket.Server({ port: PORT });
+const wss = new WebSocketServer({ port: PORT });
 
 console.log(`WebSocket Echo Server started on ws://localhost:${PORT}`);
 
