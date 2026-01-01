@@ -6,7 +6,6 @@
   let wsUrl = $state('');
   let ws = null;
   let isConnected = $state(false);
-  let messages = $state([]);
   let autoCapture = $state(false);
   let statusMessage = $state('');
 
@@ -20,60 +19,155 @@
   let currentPage = $state(0);
   let messagesPerPage = $state(50);
 
-  // Worker-based filtering results
-  let filteredMessages = $state([]);
+  // Message counts (worker holds actual messages)
+  let totalMessageCount = $state(0);
+  let filteredMessageCount = $state(0);
+
+  // Worker-based results (only slices, not full dataset)
+  let visibleMessages = $state([]);
   let groupedMessages = $state(null);
-  let primitiveFields = new Set(); // Tracks which fields have primitive values
-  let fieldValues = new Map(); // Maps field paths to their unique primitive values
+  let primitiveFields = new Set();
+  let fieldValues = new Map();
   let availableFields = $state([]);
   
   let expandedMessages = $state(new Set());
-  let expandedNestedPaths = $state(new Map()); // Tracks expanded paths within messages
+  let expandedNestedPaths = $state(new Map());
 
-  // Worker instances
-  let filterWorker = null;
-  let isFiltering = $state(false);
+  // Worker instance - single worker holds all data
+  let storageWorker = null;
+  let isProcessing = $state(false);
 
-  // Initialize filter worker
-  function initFilterWorker() {
-    if (!filterWorker) {
-      filterWorker = new Worker(new URL('./messageFilter.worker.js', import.meta.url), { type: 'module' });
+  // Initialize storage worker
+  function initStorageWorker() {
+    if (!storageWorker) {
+      storageWorker = new Worker(new URL('./messageStorage.worker.js', import.meta.url), { type: 'module' });
       
-      filterWorker.onmessage = (event) => {
-        const { success, action, filtered, grouped, fields, primitiveFields: primFields, fieldValues: fValues } = event.data;
+      storageWorker.onmessage = (event) => {
+        const { success, action, slice, totalCount, filteredCount, grouped, fields, primitiveFields: primFields, fieldValues: fValues, messages: exportedMessages } = event.data;
         
         if (success) {
-          if (action === 'filter') {
-            filteredMessages = filtered;
-            isFiltering = false;
+          if (action === 'setMessages') {
+            totalMessageCount = totalCount;
+            filteredMessageCount = filteredCount;
+            isProcessing = false;
+            // Request field extraction after setting messages
+            storageWorker.postMessage({ action: 'extractFields' });
+            // Request first slice
+            requestSlice();
+          } else if (action === 'appendMessages') {
+            // Update counts after appending messages
+            totalMessageCount = totalCount;
+            filteredMessageCount = filteredCount;
+            // Refresh current slice if on last page
+            if (currentPage === totalPages - 1) {
+              requestSlice();
+            }
+          } else if (action === 'filter') {
+            filteredMessageCount = filteredCount;
+            currentPage = 0; // Reset to first page
+            isProcessing = false;
+            // Request new slice after filtering
+            requestSlice();
+          } else if (action === 'getSlice') {
+            visibleMessages = slice;
+            totalMessageCount = totalCount;
+            filteredMessageCount = filteredCount;
+            isProcessing = false;
           } else if (action === 'group') {
-            // Convert array of entries back to Map
             groupedMessages = new Map(grouped);
-            isFiltering = false;
+            isProcessing = false;
           } else if (action === 'extractFields') {
             availableFields = fields;
             primitiveFields = new Set(primFields);
             fieldValues = new Map(fValues.map(([key, values]) => [key, new Set(values)]));
+          } else if (action === 'export') {
+            // Handle export - download the messages
+            const dataStr = JSON.stringify(exportedMessages, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `websocket-messages-${Date.now()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            statusMessage = 'Сообщения экспортированы';
+            isProcessing = false;
+          } else if (action === 'clear') {
+            totalMessageCount = 0;
+            filteredMessageCount = 0;
+            visibleMessages = [];
+            currentPage = 0;
+            isProcessing = false;
           }
         } else {
           console.error('Worker error:', event.data.error);
-          isFiltering = false;
+          isProcessing = false;
         }
       };
       
-      filterWorker.onerror = (error) => {
-        console.error('Filter worker error:', error);
-        isFiltering = false;
+      storageWorker.onerror = (error) => {
+        console.error('Storage worker error:', error);
+        isProcessing = false;
       };
     }
   }
 
+  // Request a slice of messages from the worker
+  function requestSlice() {
+    if (!storageWorker) return;
+    
+    const start = currentPage * messagesPerPage;
+    const end = start + messagesPerPage;
+    
+    storageWorker.postMessage({
+      action: 'getSlice',
+      data: { start, end }
+    });
+  }
+
+  // Trigger filtering when filter values change
+  $effect(() => {
+    if (storageWorker && totalMessageCount > 0) {
+      isProcessing = true;
+      
+      storageWorker.postMessage({
+        action: 'filter',
+        data: {
+          filterRequestId: filterRequestId,
+          customFilterField: customFilterField,
+          customFilterValue: customFilterValue
+        }
+      });
+    }
+  });
+
+  // Trigger grouping when needed
+  $effect(() => {
+    if (groupByRequestId && storageWorker && filteredMessageCount > 0) {
+      isProcessing = true;
+      
+      storageWorker.postMessage({
+        action: 'group',
+        data: {}
+      });
+    } else {
+      groupedMessages = null;
+    }
+  });
+
+  // Request new slice when page changes
+  $effect(() => {
+    if (storageWorker && filteredMessageCount > 0) {
+      requestSlice();
+    }
+  });
+
   // Cleanup worker on unmount
   $effect(() => {
     return () => {
-      if (filterWorker) {
-        filterWorker.terminate();
-        filterWorker = null;
+      if (storageWorker) {
+        storageWorker.terminate();
+        storageWorker = null;
       }
     };
   });
@@ -81,72 +175,11 @@
   let fieldIsFilterable = $derived(primitiveFields.has(customFilterField));
   let availableValues = $derived.by(() => {
     if (!fieldIsFilterable) return [];
-
     if (!fieldValues.has(customFilterField)) return [];
-
     return Array.from(fieldValues.get(customFilterField)).sort();
   });
 
-  // Trigger filtering when filter values change
-  $effect(() => {
-    if (messages.length > 0) {
-      initFilterWorker();
-      isFiltering = true;
-      
-      // Convert Svelte state to plain array to avoid DataCloneError
-      // Use structuredClone for better performance than JSON serialization
-      filterWorker.postMessage({
-        action: 'filter',
-        messages: structuredClone(messages),
-        filterRequestId: filterRequestId,
-        customFilterField: customFilterField,
-        customFilterValue: customFilterValue
-      });
-    } else {
-      filteredMessages = [];
-    }
-  });
-
-  // Trigger grouping when needed
-  $effect(() => {
-    if (groupByRequestId && filteredMessages.length > 0) {
-      initFilterWorker();
-      isFiltering = true;
-      
-      // Convert Svelte state to plain array to avoid DataCloneError
-      // Use structuredClone for better performance than JSON serialization
-      filterWorker.postMessage({
-        action: 'group',
-        messages: structuredClone(filteredMessages)
-      });
-    } else {
-      groupedMessages = null;
-    }
-  });
-
-  // Extract field paths when messages change
-  $effect(() => {
-    if (messages.length > 0) {
-      initFilterWorker();
-      
-      // Convert Svelte state to plain array to avoid DataCloneError
-      // Use structuredClone for better performance than JSON serialization
-      filterWorker.postMessage({
-        action: 'extractFields',
-        messages: structuredClone(messages)
-      });
-    } else {
-      availableFields = [];
-      primitiveFields = new Set();
-      fieldValues = new Map();
-    }
-  });
-
-  let totalPages = $derived(Math.ceil(filteredMessages.length / messagesPerPage));
-
-  let visibleMessages = $derived(filteredMessages.slice(
-            currentPage * messagesPerPage,
-            (currentPage + 1) * messagesPerPage));
+  let totalPages = $derived(Math.ceil(filteredMessageCount / messagesPerPage));
 
   let startIndex = $derived(currentPage * messagesPerPage);
 
@@ -270,20 +303,48 @@
       };
 
       ws.onmessage = (event) => {
-        if (autoCapture) {
+        if (autoCapture && storageWorker) {
           const message = {
             timestamp: new Date().toISOString(),
             type: 'received',
             data: event.data
           };
-          // Use push instead of spread operator for better performance
-          const wasOnLastPage = currentPage === totalPages - 1 || messages.length === 0;
-          messages.push(message);
-          messages = messages; // Trigger reactivity
-
-          // Auto-scroll to latest page if user was viewing the last page
-          if (wasOnLastPage) {
-            currentPage = Math.max(0, Math.ceil(messages.length / messagesPerPage) - 1);
+          
+          // Send new message to worker for storage
+          // Worker will handle adding it to its internal array
+          const wasOnLastPage = currentPage === totalPages - 1 || totalMessageCount === 0;
+          
+          // For real-time capture, we need a different approach
+          // Store messages temporarily and periodically sync with worker
+          if (!window._capturedMessages) {
+            window._capturedMessages = [];
+          }
+          window._capturedMessages.push(message);
+          
+          // Sync with worker every 10 messages or every second
+          if (window._capturedMessages.length >= 10 || !window._syncTimeout) {
+            if (window._syncTimeout) {
+              clearTimeout(window._syncTimeout);
+            }
+            
+            window._syncTimeout = setTimeout(() => {
+              if (window._capturedMessages && window._capturedMessages.length > 0) {
+                const messagesToSync = [...window._capturedMessages];
+                window._capturedMessages = [];
+                
+                // Append to worker's message store
+                storageWorker.postMessage({
+                  action: 'appendMessages',
+                  data: { messages: messagesToSync }
+                });
+                
+                // Auto-scroll to latest page if user was viewing the last page
+                if (wasOnLastPage) {
+                  currentPage = Math.max(0, Math.ceil((totalMessageCount + messagesToSync.length) / messagesPerPage) - 1);
+                }
+              }
+              window._syncTimeout = null;
+            }, 100);
           }
         }
       };
@@ -310,22 +371,24 @@
   }
 
   function clearMessages() {
-    messages = [];
+    if (!storageWorker) {
+      initStorageWorker();
+    }
+    
+    storageWorker.postMessage({ action: 'clear' });
     currentPage = 0;
     filterRequestId = '';
     statusMessage = 'Сообщения очищены';
   }
 
   function exportMessages() {
-    const dataStr = JSON.stringify(messages, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `websocket-messages-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    statusMessage = 'Сообщения экспортированы';
+    if (!storageWorker) return;
+    
+    isProcessing = true;
+    storageWorker.postMessage({
+      action: 'export',
+      data: { filtered: false } // Export all messages
+    });
   }
 
   function handleImport(event) {
@@ -349,9 +412,20 @@
             if (!Array.isArray(data)) {
               statusMessage = 'Ошибка импорта: Неверный формат';
             } else {
-              messages = data.slice();
+              // Initialize storage worker if needed
+              if (!storageWorker) {
+                initStorageWorker();
+              }
+              
+              // Send parsed messages to storage worker
+              isProcessing = true;
+              storageWorker.postMessage({
+                action: 'setMessages',
+                data: { messages: data }
+              });
+              
               currentPage = 0;
-              statusMessage = `Импортировано ${messages.length} ${getMessageWord(messages.length)}`;
+              statusMessage = `Импортировано ${data.length} ${getMessageWord(data.length)}`;
             }
           } else {
             statusMessage = `Ошибка импорта: ${error}`;
@@ -574,8 +648,8 @@
   </div>
 
   <div class="actions-panel">
-    <button class="btn btn-success" onclick={exportMessages} disabled={messages.length === 0}>
-      Экспортировать сообщения ({messages.length})
+    <button class="btn btn-success" onclick={exportMessages} disabled={totalMessageCount === 0}>
+      Экспортировать сообщения ({totalMessageCount})
     </button>
 
     <label class="btn btn-info file-label">
@@ -588,13 +662,13 @@
       />
     </label>
 
-    <button class="btn btn-warning" onclick={clearMessages} disabled={messages.length === 0}>
+    <button class="btn btn-warning" onclick={clearMessages} disabled={totalMessageCount === 0}>
       Очистить сообщения
     </button>
   </div>
 
   <div class="messages-panel">
-    <h2>Захваченные сообщения ({filteredMessages.length}{filterRequestId ? ` из ${messages.length}` : ''})</h2>
+    <h2>Захваченные сообщения ({filteredMessageCount}{filterRequestId ? ` из ${totalMessageCount}` : ''})</h2>
 
     {#if groupByRequestId && groupedMessages}
       <!-- Grouped view by Request ID -->
@@ -652,14 +726,14 @@
       </div>
     {:else}
       <!-- Regular list view with pagination -->
-      {#if !groupByRequestId && filteredMessages.length > messagesPerPage}
+      {#if !groupByRequestId && filteredMessageCount > messagesPerPage}
         <div class="pagination-controls">
           <button class="btn btn-sm" onclick={prevPage} disabled={currentPage === 0}>
             Предыдущая
           </button>
           <span class="page-info">
             Страница {currentPage + 1} из {totalPages}
-            (показано {startIndex + 1}-{Math.min(startIndex + messagesPerPage, filteredMessages.length)} из {filteredMessages.length})
+            (показано {startIndex + 1}-{Math.min(startIndex + messagesPerPage, filteredMessageCount)} из {filteredMessageCount})
           </span>
           <button class="btn btn-sm" onclick={nextPage} disabled={currentPage === totalPages - 1}>
             Следующая
