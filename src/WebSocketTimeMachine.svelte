@@ -13,12 +13,12 @@
   let groupByRequestId = false;
   let customFilterField = '';
   let customFilterValue = '';
-  let showFieldSuggestions = false;
   let availableFields = [];
+  let primitiveFields = new Set(); // Tracks which fields have primitive values
+  let fieldValues = new Map(); // Maps field paths to their unique primitive values
   let expandedMessages = new Set();
   
   // Constants
-  const AUTOCOMPLETE_BLUR_DELAY = 200;
   const MAX_AUTOCOMPLETE_SUGGESTIONS = 10;
   
   // Pagination state
@@ -79,17 +79,34 @@
     }
   }
   
-  // Extract all field paths from an object (including nested)
-  function extractFieldPaths(obj, prefix = '') {
+  // Extract all field paths from an object (including nested) and track primitives
+  function extractFieldPaths(obj, prefix = '', primFields, valuesMap) {
     const paths = [];
     
     if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
       for (const key in obj) {
         const path = prefix ? `${prefix}.${key}` : key;
+        const value = obj[key];
         paths.push(path);
         
-        if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-          paths.push(...extractFieldPaths(obj[key], path));
+        // Check if value is primitive (string, number, boolean, null)
+        const isPrimitive = value === null || 
+                          typeof value === 'string' || 
+                          typeof value === 'number' || 
+                          typeof value === 'boolean';
+        
+        if (isPrimitive) {
+          primFields.add(path);
+          
+          // Store unique values for this field
+          if (!valuesMap.has(path)) {
+            valuesMap.set(path, new Set());
+          }
+          if (value !== null) {
+            valuesMap.get(path).add(String(value));
+          }
+        } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          paths.push(...extractFieldPaths(value, path, primFields, valuesMap));
         }
       }
     }
@@ -97,23 +114,38 @@
     return paths;
   }
   
-  // Get all available field paths from messages
+  // Get all available field paths from messages and track primitive fields
   function getAllFieldPaths(msgs) {
     const fieldsSet = new Set();
+    const primFields = new Set();
+    const valuesMap = new Map();
     
     for (const msg of msgs) {
       // Add top-level message fields
       fieldsSet.add('type');
       fieldsSet.add('timestamp');
-      fieldsSet.add('data');
+      
+      // Top-level fields are primitives
+      primFields.add('type');
+      primFields.add('timestamp');
+      
+      // Track top-level values
+      if (!valuesMap.has('type')) valuesMap.set('type', new Set());
+      if (!valuesMap.has('timestamp')) valuesMap.set('timestamp', new Set());
+      valuesMap.get('type').add(String(msg.type));
+      valuesMap.get('timestamp').add(String(msg.timestamp));
       
       // Parse and add nested data fields
       const data = parseMessageData(msg);
       if (data) {
-        const dataPaths = extractFieldPaths(data, 'data');
+        const dataPaths = extractFieldPaths(data, 'data', primFields, valuesMap);
         dataPaths.forEach(path => fieldsSet.add(path));
       }
     }
+    
+    // Update global state
+    primitiveFields = primFields;
+    fieldValues = valuesMap;
     
     return Array.from(fieldsSet).sort();
   }
@@ -186,6 +218,11 @@
     availableFields = getAllFieldPaths(messages);
   }
   
+  $: fieldIsFilterable = primitiveFields.has(customFilterField);
+  $: availableValues = fieldIsFilterable && fieldValues.has(customFilterField) 
+    ? Array.from(fieldValues.get(customFilterField)).sort() 
+    : [];
+  
   $: filteredByRequestId = filterRequestId 
     ? messages.filter(msg => {
         const data = parseMessageData(msg);
@@ -205,10 +242,6 @@
     (currentPage + 1) * messagesPerPage
   );
   $: startIndex = currentPage * messagesPerPage;
-  
-  $: filteredFieldSuggestions = customFilterField 
-    ? availableFields.filter(f => f.toLowerCase().includes(customFilterField.toLowerCase()))
-    : availableFields;
   
   function groupMessagesByRequestId(msgs) {
     const groups = new Map();
@@ -399,46 +432,21 @@
     <div class="filter-section">
       <h3>Фильтр по пользовательскому полю</h3>
       <div class="custom-filter-group">
-        <div class="input-group autocomplete-container">
+        <div class="input-group">
           <label for="custom-field">Поле:</label>
           <input 
             id="custom-field"
             type="text" 
             bind:value={customFilterField}
-            on:focus={() => showFieldSuggestions = true}
-            on:blur={() => setTimeout(() => showFieldSuggestions = false, AUTOCOMPLETE_BLUR_DELAY)}
+            list="field-suggestions"
             placeholder="напр. data.userId, type, timestamp"
             autocomplete="off"
           />
-          {#if showFieldSuggestions && filteredFieldSuggestions.length > 0}
-            <div class="autocomplete-dropdown">
-              {#each filteredFieldSuggestions.slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS) as field}
-                <div 
-                  class="autocomplete-item"
-                  role="button"
-                  tabindex="0"
-                  on:mousedown={() => {
-                    customFilterField = field;
-                    showFieldSuggestions = false;
-                  }}
-                  on:keydown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      customFilterField = field;
-                      showFieldSuggestions = false;
-                    }
-                  }}
-                >
-                  {field}
-                </div>
-              {/each}
-              {#if filteredFieldSuggestions.length > MAX_AUTOCOMPLETE_SUGGESTIONS}
-                <div class="autocomplete-more">
-                  +{filteredFieldSuggestions.length - MAX_AUTOCOMPLETE_SUGGESTIONS} ещё...
-                </div>
-              {/if}
-            </div>
-          {/if}
+          <datalist id="field-suggestions">
+            {#each availableFields as field}
+              <option value={field}></option>
+            {/each}
+          </datalist>
         </div>
         <div class="input-group">
           <label for="custom-value">Значение:</label>
@@ -446,8 +454,18 @@
             id="custom-value"
             type="text" 
             bind:value={customFilterValue}
+            list={fieldIsFilterable ? "value-suggestions" : null}
             placeholder="Введите значение для поиска"
+            disabled={!fieldIsFilterable}
+            title={fieldIsFilterable ? "Выберите значение из списка" : "Выберите поле с примитивными значениями"}
           />
+          {#if fieldIsFilterable}
+            <datalist id="value-suggestions">
+              {#each availableValues as value}
+                <option value={value}></option>
+              {/each}
+            </datalist>
+          {/if}
         </div>
       </div>
     </div>
@@ -793,44 +811,6 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
-  }
-  
-  .autocomplete-container {
-    position: relative;
-  }
-  
-  .autocomplete-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    max-height: 200px;
-    overflow-y: auto;
-    z-index: 1000;
-  }
-  
-  .autocomplete-item {
-    padding: 8px 12px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.2s;
-  }
-  
-  .autocomplete-item:hover {
-    background: #f0f0f0;
-  }
-  
-  .autocomplete-more {
-    padding: 8px 12px;
-    font-size: 12px;
-    color: #666;
-    font-style: italic;
-    background: #f8f9fa;
   }
 
   .checkbox-label {
