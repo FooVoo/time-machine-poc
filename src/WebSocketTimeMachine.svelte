@@ -11,6 +11,11 @@
   // Filtering and grouping
   let filterRequestId = '';
   let groupByRequestId = false;
+  let customFilterField = '';
+  let customFilterValue = '';
+  let showFieldSuggestions = false;
+  let availableFields = [];
+  let expandedMessages = new Set();
   
   // Pagination state
   let currentPage = 0;
@@ -25,13 +30,121 @@
     }
   }
   
+  // Extract all field paths from an object (including nested)
+  function extractFieldPaths(obj, prefix = '') {
+    const paths = [];
+    
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      for (const key in obj) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        paths.push(path);
+        
+        if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+          paths.push(...extractFieldPaths(obj[key], path));
+        }
+      }
+    }
+    
+    return paths;
+  }
+  
+  // Get all available field paths from messages
+  function getAllFieldPaths(msgs) {
+    const fieldsSet = new Set();
+    
+    for (const msg of msgs) {
+      // Add top-level message fields
+      fieldsSet.add('type');
+      fieldsSet.add('timestamp');
+      fieldsSet.add('data');
+      
+      // Parse and add nested data fields
+      const data = parseMessageData(msg);
+      if (data) {
+        const dataPaths = extractFieldPaths(data, 'data');
+        dataPaths.forEach(path => fieldsSet.add(path));
+      }
+    }
+    
+    return Array.from(fieldsSet).sort();
+  }
+  
+  // Get value from nested path
+  function getNestedValue(obj, path) {
+    const parts = path.split('.');
+    let value = obj;
+    
+    for (const part of parts) {
+      if (value && typeof value === 'object' && part in value) {
+        value = value[part];
+      } else {
+        return undefined;
+      }
+    }
+    
+    return value;
+  }
+  
+  // Filter messages by custom field
+  function filterByCustomField(msgs) {
+    if (!customFilterField || !customFilterValue) {
+      return msgs;
+    }
+    
+    return msgs.filter(msg => {
+      let value;
+      
+      if (customFilterField.startsWith('data.')) {
+        const data = parseMessageData(msg);
+        if (!data) return false;
+        const fieldPath = customFilterField.substring(5); // Remove 'data.' prefix
+        value = getNestedValue(data, fieldPath);
+      } else {
+        value = msg[customFilterField];
+      }
+      
+      if (value === undefined || value === null) return false;
+      
+      const valueStr = String(value).toLowerCase();
+      const filterStr = customFilterValue.toLowerCase();
+      
+      return valueStr.includes(filterStr);
+    });
+  }
+  
+  // Toggle message expansion
+  function toggleMessageExpansion(index) {
+    if (expandedMessages.has(index)) {
+      expandedMessages.delete(index);
+    } else {
+      expandedMessages.add(index);
+    }
+    expandedMessages = expandedMessages;
+  }
+  
+  // Format value for display (handle different types)
+  function formatValue(value) {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return JSON.stringify(value, null, 2);
+  }
+  
   // Computed values for filtering and grouping
-  $: filteredMessages = filterRequestId 
+  $: {
+    // Update available fields when messages change
+    availableFields = getAllFieldPaths(messages);
+  }
+  
+  $: filteredByRequestId = filterRequestId 
     ? messages.filter(msg => {
         const data = parseMessageData(msg);
         return data && data.requestId && data.requestId.includes(filterRequestId);
       })
     : messages;
+  
+  $: filteredMessages = filterByCustomField(filteredByRequestId);
   
   $: groupedMessages = groupByRequestId ? groupMessagesByRequestId(filteredMessages) : null;
   
@@ -43,6 +156,10 @@
     (currentPage + 1) * messagesPerPage
   );
   $: startIndex = currentPage * messagesPerPage;
+  
+  $: filteredFieldSuggestions = customFilterField 
+    ? availableFields.filter(f => f.toLowerCase().includes(customFilterField.toLowerCase()))
+    : availableFields;
   
   function groupMessagesByRequestId(msgs) {
     const groups = new Map();
@@ -217,15 +334,74 @@
   </div>
   
   <div class="filter-panel">
-    <div class="input-group">
-      <label for="filter">Filter by Request ID:</label>
-      <input 
-        id="filter"
-        type="text" 
-        bind:value={filterRequestId} 
-        placeholder="Enter request ID to filter"
-      />
+    <div class="filter-section">
+      <h3>Filter by Request ID</h3>
+      <div class="input-group">
+        <label for="filter">Request ID:</label>
+        <input 
+          id="filter"
+          type="text" 
+          bind:value={filterRequestId} 
+          placeholder="Enter request ID to filter"
+        />
+      </div>
     </div>
+    
+    <div class="filter-section">
+      <h3>Custom Field Filter</h3>
+      <div class="custom-filter-group">
+        <div class="input-group autocomplete-container">
+          <label for="custom-field">Field:</label>
+          <input 
+            id="custom-field"
+            type="text" 
+            bind:value={customFilterField}
+            on:focus={() => showFieldSuggestions = true}
+            on:blur={() => setTimeout(() => showFieldSuggestions = false, 200)}
+            placeholder="e.g. data.userId, type, timestamp"
+            autocomplete="off"
+          />
+          {#if showFieldSuggestions && filteredFieldSuggestions.length > 0}
+            <div class="autocomplete-dropdown">
+              {#each filteredFieldSuggestions.slice(0, 10) as field}
+                <div 
+                  class="autocomplete-item"
+                  role="button"
+                  tabindex="0"
+                  on:mousedown={() => {
+                    customFilterField = field;
+                    showFieldSuggestions = false;
+                  }}
+                  on:keydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      customFilterField = field;
+                      showFieldSuggestions = false;
+                    }
+                  }}
+                >
+                  {field}
+                </div>
+              {/each}
+              {#if filteredFieldSuggestions.length > 10}
+                <div class="autocomplete-more">
+                  +{filteredFieldSuggestions.length - 10} more...
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+        <div class="input-group">
+          <label for="custom-value">Value:</label>
+          <input 
+            id="custom-value"
+            type="text" 
+            bind:value={customFilterValue}
+            placeholder="Enter value to match"
+          />
+        </div>
+      </div>
+    </div>
+    
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={groupByRequestId} />
       Group by Request ID
@@ -266,12 +442,41 @@
             </div>
             <div class="group-messages">
               {#each msgs as message, index}
+                {@const globalIndex = `group-${requestId}-${index}`}
+                {@const isExpanded = expandedMessages.has(globalIndex)}
+                {@const parsedData = parseMessageData(message)}
+                
                 <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
                   <div class="message-header">
                     <span class="message-type">{message.type}</span>
                     <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+                    <button 
+                      class="expand-btn" 
+                      on:click={() => toggleMessageExpansion(globalIndex)}
+                      title={isExpanded ? 'Collapse' : 'Expand JSON'}
+                    >
+                      {isExpanded ? '▼' : '▶'}
+                    </button>
                   </div>
-                  <div class="message-data">{message.data}</div>
+                  
+                  {#if isExpanded && parsedData}
+                    <div class="json-viewer">
+                      <pre class="json-content">{JSON.stringify(parsedData, null, 2)}</pre>
+                    </div>
+                  {:else if isExpanded && !parsedData}
+                    <div class="message-data primitive">
+                      <span class="primitive-label">Primitive value:</span>
+                      <span class="primitive-value">{formatValue(message.data)}</span>
+                    </div>
+                  {:else}
+                    <div class="message-data">
+                      {#if parsedData}
+                        {JSON.stringify(parsedData)}
+                      {:else}
+                        {formatValue(message.data)}
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
               {/each}
             </div>
@@ -302,13 +507,42 @@
       
       <div class="messages-list">
         {#each visibleMessages as message, index}
+          {@const globalIndex = startIndex + index}
+          {@const isExpanded = expandedMessages.has(globalIndex)}
+          {@const parsedData = parseMessageData(message)}
+          
           <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
             <div class="message-header">
-              <span class="message-index">#{startIndex + index + 1}</span>
+              <span class="message-index">#{globalIndex + 1}</span>
               <span class="message-type">{message.type}</span>
               <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+              <button 
+                class="expand-btn" 
+                on:click={() => toggleMessageExpansion(globalIndex)}
+                title={isExpanded ? 'Collapse' : 'Expand JSON'}
+              >
+                {isExpanded ? '▼' : '▶'}
+              </button>
             </div>
-            <div class="message-data">{message.data}</div>
+            
+            {#if isExpanded && parsedData}
+              <div class="json-viewer">
+                <pre class="json-content">{JSON.stringify(parsedData, null, 2)}</pre>
+              </div>
+            {:else if isExpanded && !parsedData}
+              <div class="message-data primitive">
+                <span class="primitive-label">Primitive value:</span>
+                <span class="primitive-value">{formatValue(message.data)}</span>
+              </div>
+            {:else}
+              <div class="message-data">
+                {#if parsedData}
+                  {JSON.stringify(parsedData)}
+                {:else}
+                  {formatValue(message.data)}
+                {/if}
+              </div>
+            {/if}
           </div>
         {:else}
           <div class="empty-state">No messages captured yet</div>
@@ -482,7 +716,67 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 15px;
+  }
+  
+  .filter-section {
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 15px;
+  }
+  
+  .filter-section:last-of-type {
+    border-bottom: none;
+  }
+  
+  .filter-section h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .custom-filter-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+  }
+  
+  .autocomplete-container {
+    position: relative;
+  }
+  
+  .autocomplete-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+  }
+  
+  .autocomplete-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+  }
+  
+  .autocomplete-item:hover {
+    background: #f0f0f0;
+  }
+  
+  .autocomplete-more {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+    background: #f8f9fa;
   }
 
   .checkbox-label {
@@ -575,6 +869,7 @@
   .message-header {
     display: flex;
     gap: 10px;
+    align-items: center;
     margin-bottom: 8px;
     font-size: 12px;
     color: #666;
@@ -592,12 +887,59 @@
   .message-time {
     margin-left: auto;
   }
+  
+  .expand-btn {
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .expand-btn:hover {
+    background: #e0e0e0;
+  }
 
   .message-data {
     font-family: 'Courier New', monospace;
     font-size: 13px;
     word-break: break-word;
     color: #333;
+  }
+  
+  .message-data.primitive {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .primitive-label {
+    font-weight: 600;
+    color: #555;
+  }
+  
+  .primitive-value {
+    color: #0066cc;
+  }
+  
+  .json-viewer {
+    margin-top: 10px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    overflow: auto;
+    max-height: 400px;
+  }
+  
+  .json-content {
+    margin: 0;
+    padding: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #333;
+    overflow-x: auto;
   }
 
   .empty-state {
