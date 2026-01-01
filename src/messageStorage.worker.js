@@ -23,32 +23,39 @@ function getNestedValue(obj, path) {
   return value;
 }
 
-// Filter by request ID
+// Filter by request ID - optimized to single pass
 function filterByRequestId(filterRequestId) {
-  if (!filterRequestId) return Array.from({ length: messages.length }, (_, i) => i);
+  if (!filterRequestId) {
+    return Array.from({ length: messages.length }, (_, i) => i);
+  }
 
-  return messages
-    .map((msg, index) => {
-      const data = parseMessageData(msg);
-      return data && data.requestId && data.requestId.includes(filterRequestId) ? index : -1;
-    })
-    .filter(index => index !== -1);
+  const indices = [];
+  for (let i = 0; i < messages.length; i++) {
+    const data = parseMessageData(messages[i]);
+    if (data?.requestId?.includes(filterRequestId)) {
+      indices.push(i);
+    }
+  }
+  return indices;
 }
 
-// Filter by custom field
+// Filter by custom field - optimized with early returns
 function filterByCustomField(indices, customFilterField, customFilterValue) {
   if (!customFilterField || !customFilterValue) {
     return indices;
   }
 
+  const filterStr = customFilterValue.toLowerCase();
+  const isDataField = customFilterField.startsWith('data.');
+  const fieldPath = isDataField ? customFilterField.substring(5) : null;
+
   return indices.filter(index => {
     const msg = messages[index];
     let value;
 
-    if (customFilterField.startsWith('data.')) {
+    if (isDataField) {
       const data = parseMessageData(msg);
       if (!data) return false;
-      const fieldPath = customFilterField.substring(5);
       value = getNestedValue(data, fieldPath);
     } else {
       value = msg[customFilterField];
@@ -57,8 +64,6 @@ function filterByCustomField(indices, customFilterField, customFilterValue) {
     if (value === undefined || value === null) return false;
 
     const valueStr = String(value).toLowerCase();
-    const filterStr = customFilterValue.toLowerCase();
-
     return valueStr.includes(filterStr);
   });
 }
@@ -187,11 +192,11 @@ self.onmessage = function(e) {
         
       case 'filter':
         // Apply filters and store filtered indices
+        // Start with all indices or filtered by request ID
         let indices = filterByRequestId(actionData.filterRequestId);
         
-        if (actionData.customFilterField && actionData.customFilterValue) {
-          indices = filterByCustomField(indices, actionData.customFilterField, actionData.customFilterValue);
-        }
+        // Apply custom field filter if provided
+        indices = filterByCustomField(indices, actionData.customFilterField, actionData.customFilterValue);
         
         filteredIndices = indices;
         result = { 

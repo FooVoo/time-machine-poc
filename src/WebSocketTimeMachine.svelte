@@ -50,58 +50,77 @@
         const { success, action, slice, totalCount, filteredCount, grouped, fields, primitiveFields: primFields, fieldValues: fValues, messages: exportedMessages } = event.data;
         
         if (success) {
-          if (action === 'setMessages') {
-            totalMessageCount = totalCount;
-            filteredMessageCount = filteredCount;
-            isProcessing = false;
-            // Request field extraction after setting messages
-            storageWorker.postMessage({ action: 'extractFields' });
-            // Request first slice
-            requestSlice();
-          } else if (action === 'appendMessages') {
-            // Update counts after appending messages
-            totalMessageCount = totalCount;
-            filteredMessageCount = filteredCount;
-            // Refresh current slice if on last page
-            if (currentPage === totalPages - 1) {
+          switch (action) {
+            case 'setMessages':
+              totalMessageCount = totalCount;
+              filteredMessageCount = filteredCount;
+              isProcessing = false;
+              // Request field extraction after setting messages
+              storageWorker.postMessage({ action: 'extractFields' });
+              // Request first slice
               requestSlice();
-            }
-          } else if (action === 'filter') {
-            filteredMessageCount = filteredCount;
-            currentPage = 0; // Reset to first page
-            isProcessing = false;
-            // Request new slice after filtering
-            requestSlice();
-          } else if (action === 'getSlice') {
-            visibleMessages = slice;
-            totalMessageCount = totalCount;
-            filteredMessageCount = filteredCount;
-            isProcessing = false;
-          } else if (action === 'group') {
-            groupedMessages = new Map(grouped);
-            isProcessing = false;
-          } else if (action === 'extractFields') {
-            availableFields = fields;
-            primitiveFields = new Set(primFields);
-            fieldValues = new Map(fValues.map(([key, values]) => [key, new Set(values)]));
-          } else if (action === 'export') {
-            // Handle export - download the messages
-            const dataStr = JSON.stringify(exportedMessages, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `websocket-messages-${Date.now()}.json`;
-            link.click();
-            URL.revokeObjectURL(url);
-            statusMessage = 'Сообщения экспортированы';
-            isProcessing = false;
-          } else if (action === 'clear') {
-            totalMessageCount = 0;
-            filteredMessageCount = 0;
-            visibleMessages = [];
-            currentPage = 0;
-            isProcessing = false;
+              break;
+              
+            case 'appendMessages':
+              // Update counts after appending messages
+              totalMessageCount = totalCount;
+              filteredMessageCount = filteredCount;
+              // Refresh current slice if on last page
+              if (currentPage === totalPages - 1) {
+                requestSlice();
+              }
+              break;
+              
+            case 'filter':
+              filteredMessageCount = filteredCount;
+              currentPage = 0; // Reset to first page
+              isProcessing = false;
+              // Request new slice after filtering
+              requestSlice();
+              break;
+              
+            case 'getSlice':
+              visibleMessages = slice;
+              totalMessageCount = totalCount;
+              filteredMessageCount = filteredCount;
+              isProcessing = false;
+              break;
+              
+            case 'group':
+              groupedMessages = new Map(grouped);
+              isProcessing = false;
+              break;
+              
+            case 'extractFields':
+              availableFields = fields;
+              primitiveFields = new Set(primFields);
+              fieldValues = new Map(fValues.map(([key, values]) => [key, new Set(values)]));
+              break;
+              
+            case 'export':
+              // Handle export - download the messages
+              const dataStr = JSON.stringify(exportedMessages, null, 2);
+              const dataBlob = new Blob([dataStr], { type: 'application/json' });
+              const url = URL.createObjectURL(dataBlob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `websocket-messages-${Date.now()}.json`;
+              link.click();
+              URL.revokeObjectURL(url);
+              statusMessage = 'Сообщения экспортированы';
+              isProcessing = false;
+              break;
+              
+            case 'clear':
+              totalMessageCount = 0;
+              filteredMessageCount = 0;
+              visibleMessages = [];
+              currentPage = 0;
+              isProcessing = false;
+              break;
+              
+            default:
+              console.warn('Unknown action:', action);
           }
         } else {
           console.error('Worker error:', event.data.error);
