@@ -25,7 +25,28 @@
   let currentPage = 0;
   let messagesPerPage = 50;
   
-  // Russian pluralization helper
+  // Russian pluralization constants
+  const RUSSIAN_PLURAL_FORMS = {
+    messages: {
+      one: 'сообщение',    // 1, 21, 31, ...
+      few: 'сообщения',    // 2-4, 22-24, 32-34, ...
+      many: 'сообщений'    // 0, 5-20, 25-30, ...
+    }
+  };
+  
+  /**
+   * Returns the correct Russian plural form based on count.
+   * Russian has three plural forms:
+   * - one: for numbers ending in 1 (except 11): 1, 21, 31, ...
+   * - few: for numbers ending in 2-4 (except 12-14): 2-4, 22-24, 32-34, ...
+   * - many: for all other cases: 0, 5-20, 25-30, ...
+   * 
+   * @param {number} count - The number to check
+   * @param {string} one - Form for 1, 21, 31, ... (e.g., "сообщение")
+   * @param {string} few - Form for 2-4, 22-24, ... (e.g., "сообщения")
+   * @param {string} many - Form for 0, 5-20, 25-30, ... (e.g., "сообщений")
+   * @returns {string} The correct plural form
+   */
   function pluralizeRussian(count, one, few, many) {
     const mod10 = count % 10;
     const mod100 = count % 100;
@@ -37,6 +58,16 @@
     } else {
       return many;
     }
+  }
+  
+  // Helper function for message pluralization
+  function getMessageWord(count) {
+    return pluralizeRussian(
+      count,
+      RUSSIAN_PLURAL_FORMS.messages.one,
+      RUSSIAN_PLURAL_FORMS.messages.few,
+      RUSSIAN_PLURAL_FORMS.messages.many
+    );
   }
   
   // Parse message data once and cache it
@@ -280,7 +311,7 @@
           
           messages = imported.slice();
           currentPage = 0;
-          statusMessage = `Импортировано ${messages.length} ${pluralizeRussian(messages.length, 'сообщение', 'сообщения', 'сообщений')}`;
+          statusMessage = `Импортировано ${messages.length} ${getMessageWord(messages.length)}`;
         } catch (error) {
           statusMessage = 'Ошибка импорта: Некорректный JSON';
         }
@@ -457,7 +488,7 @@
           <div class="request-group">
             <div class="group-header">
               <strong>ID запроса:</strong> {requestId}
-              <span class="group-count">({msgs.length} {pluralizeRussian(msgs.length, 'сообщение', 'сообщения', 'сообщений')})</span>
+              <span class="group-count">({msgs.length} {getMessageWord(msgs.length)})</span>
             </div>
             <div class="group-messages">
               {#each msgs as message, index}
