@@ -36,6 +36,10 @@
   // Worker instance - single worker holds all data
   let storageWorker = null;
   let isProcessing = $state(false);
+  
+  // Real-time capture buffer (component-level, not global)
+  let capturedMessagesBuffer = [];
+  let syncTimeout = null;
 
   // Initialize storage worker
   function initStorageWorker() {
@@ -310,40 +314,18 @@
             data: event.data
           };
           
-          // Send new message to worker for storage
-          // Worker will handle adding it to its internal array
+          // Track if user is on last page for auto-scroll
           const wasOnLastPage = currentPage === totalPages - 1 || totalMessageCount === 0;
           
-          // For real-time capture, we need a different approach
-          // Store messages temporarily and periodically sync with worker
-          if (!window._capturedMessages) {
-            window._capturedMessages = [];
-          }
-          window._capturedMessages.push(message);
+          // Buffer messages for batch sync with worker
+          capturedMessagesBuffer.push(message);
           
-          // Sync with worker every 10 messages or every second
-          if (window._capturedMessages.length >= 10 || !window._syncTimeout) {
-            if (window._syncTimeout) {
-              clearTimeout(window._syncTimeout);
-            }
-            
-            window._syncTimeout = setTimeout(() => {
-              if (window._capturedMessages && window._capturedMessages.length > 0) {
-                const messagesToSync = [...window._capturedMessages];
-                window._capturedMessages = [];
-                
-                // Append to worker's message store
-                storageWorker.postMessage({
-                  action: 'appendMessages',
-                  data: { messages: messagesToSync }
-                });
-                
-                // Auto-scroll to latest page if user was viewing the last page
-                if (wasOnLastPage) {
-                  currentPage = Math.max(0, Math.ceil((totalMessageCount + messagesToSync.length) / messagesPerPage) - 1);
-                }
-              }
-              window._syncTimeout = null;
+          // Sync with worker every 10 messages or after 100ms delay
+          if (capturedMessagesBuffer.length >= 10) {
+            syncCapturedMessages(wasOnLastPage);
+          } else if (!syncTimeout) {
+            syncTimeout = setTimeout(() => {
+              syncCapturedMessages(wasOnLastPage);
             }, 100);
           }
         }
@@ -356,10 +338,36 @@
       ws.onclose = () => {
         isConnected = false;
         statusMessage = 'Отключено';
+        // Sync any remaining buffered messages
+        if (capturedMessagesBuffer.length > 0) {
+          syncCapturedMessages(false);
+        }
       };
     } catch (error) {
       statusMessage = 'Ошибка подключения: ' + error.message;
     }
+  }
+
+  // Sync captured messages to worker
+  function syncCapturedMessages(wasOnLastPage) {
+    if (capturedMessagesBuffer.length === 0 || !storageWorker) return;
+    
+    const messagesToSync = [...capturedMessagesBuffer];
+    capturedMessagesBuffer = [];
+    
+    if (syncTimeout) {
+      clearTimeout(syncTimeout);
+      syncTimeout = null;
+    }
+    
+    // Send to worker
+    storageWorker.postMessage({
+      action: 'appendMessages',
+      data: { messages: messagesToSync }
+    });
+    
+    // Note: Don't calculate page here - wait for worker response with updated count
+    // The worker will call appendMessages handler which updates totalMessageCount
   }
 
   function disconnect() {
@@ -367,6 +375,11 @@
       ws.close();
       ws = null;
       isConnected = false;
+    }
+    // Clean up any pending sync
+    if (syncTimeout) {
+      clearTimeout(syncTimeout);
+      syncTimeout = null;
     }
   }
 

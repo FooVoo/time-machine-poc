@@ -168,12 +168,17 @@ self.onmessage = function(e) {
         // Append new messages (for real-time capture)
         const startIndex = messages.length;
         messages.push(...actionData.messages);
-        // Add new indices to filtered indices if no active filter
-        if (filteredIndices.length === startIndex) {
-          // No filter active, add new indices
+        
+        // Check if we need to update filtered indices
+        // If filteredIndices equals total message count (no filter), append new indices
+        const noFilterActive = filteredIndices.length === startIndex;
+        if (noFilterActive) {
+          // No filter active, add new message indices
           const newIndices = Array.from({ length: actionData.messages.length }, (_, i) => startIndex + i);
           filteredIndices.push(...newIndices);
         }
+        // If filter is active, the new messages won't appear until user re-applies filter
+        
         result = { 
           totalCount: messages.length,
           filteredCount: filteredIndices.length
