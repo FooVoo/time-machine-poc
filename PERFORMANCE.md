@@ -120,10 +120,11 @@ Automatically moves to the last page when new messages arrive if you're viewing 
 - **Import time**: Slow due to nested loops
 
 ### After Optimizations
-- **10,000 messages**: Instant page switches, smooth scrolling
+- **12,000 messages**: Instant page switches, smooth scrolling
 - **Memory**: Significantly reduced
 - **Import time**: 5-10x faster for large datasets
-- **Pagination**: 50 messages per page = ~200 pages for 10,000 messages
+- **Pagination**: 50 messages per page = 240 pages for 12,000 messages
+- **File Size**: Handles 10-20MB JSON files efficiently
 
 ## Configuration
 
@@ -137,7 +138,7 @@ For very large individual messages, you may want to reduce this to 20-30. For sm
 
 ## Usage Tips
 
-1. **Large Imports**: When importing 5-10MB files, a brief "Importing..." message appears
+1. **Large Imports**: When importing 10-20MB files, a brief "Importing..." message appears
 2. **Navigation**: Use pagination controls to navigate through message history
 3. **Latest Button**: Quickly jump to the most recent messages
 4. **Memory**: For extremely large datasets (>50,000 messages), consider exporting in chunks

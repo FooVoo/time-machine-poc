@@ -15,8 +15,8 @@ A Svelte-based web component for viewing, filtering, and analyzing WebSocket mes
 - 📂 **Import Messages**: Load previously saved message sessions
 - 🎨 **Modern UI**: Clean, intuitive interface with real-time status updates
 - 🧩 **Web Component**: Built as a custom element for easy integration
-- ⚡ **High Performance**: Optimized to handle large datasets (5-10MB, 10,000+ messages)
-- 📄 **Example Data**: Includes 2,000+ sample messages for testing
+- ⚡ **High Performance**: Optimized to handle large datasets (10-20MB, 12,000+ messages)
+- 📄 **Example Data**: Includes 12,000 sample messages for testing
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ A Svelte-based web component for viewing, filtering, and analyzing WebSocket mes
 1. Open `demo.html` in your browser
 2. Click **"Import Messages"**
 3. Select `example-messages.json` from the repository
-4. Explore 2,000+ sample messages with all features enabled
+4. Explore 12,000 sample messages with all features enabled
 
 See [EXAMPLE_MESSAGES.md](./EXAMPLE_MESSAGES.md) for detailed information about the example data and how to use it.
 
@@ -157,7 +157,7 @@ The component is optimized to handle large message datasets efficiently:
 
 For detailed performance information, see [PERFORMANCE.md](PERFORMANCE.md).
 
-**Tested with**: 10,000+ messages, 5-10MB JSON files
+**Tested with**: 12,000+ messages, 10-20MB JSON files
 
 ## License
 

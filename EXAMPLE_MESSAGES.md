@@ -4,14 +4,14 @@ This file documents the example messages provided in `example-messages.json` for
 
 ## Overview
 
-The `example-messages.json` file contains **2,056 sample WebSocket messages** that showcase all features of the component:
+The `example-messages.json` file contains **12,000 sample WebSocket messages** that showcase all features of the component:
 
 - Message filtering by requestId
 - Custom field filtering with nested paths
 - Message grouping by requestId
 - JSON viewer for complex objects
 - Handling of different data types (JSON, strings, numbers)
-- Performance with large datasets (5MB+ file)
+- Performance with large datasets (12MB file)
 
 ## How to Use
 
@@ -20,7 +20,7 @@ The `example-messages.json` file contains **2,056 sample WebSocket messages** th
 1. Open `index.html` or `demo.html` in your browser
 2. Click the **"Import Messages"** button
 3. Select the `example-messages.json` file
-4. The component will load all 2,056 messages
+4. The component will load all 12,000 messages
 
 ### 2. Try the Features
 
@@ -219,13 +219,15 @@ The file also includes non-JSON messages:
 
 ## Message Statistics
 
-- **Total Messages**: 2,056
-- **Request/Response Pairs**: ~1,000 pairs
-- **Unique Request IDs**: ~1,000
+- **Total Messages**: 12,000
+- **Request/Response Pairs**: ~6,000 pairs
+- **Unique Request IDs**: ~6,000
 - **Message Types**:
-  - Sent: ~1,000
-  - Received: ~1,050
-  - Primitives: ~6
+  - Sent: ~6,000
+  - Received: ~6,000
+- **Message Size Distribution**:
+  - ~50% with larger payloads (10-30 items)
+  - ~50% with smaller payloads (0-3 items)
 - **Actions Covered**:
   - `login` / `logout`
   - `getUserProfile`
@@ -236,6 +238,7 @@ The file also includes non-JSON messages:
   - `createCart`
   - `processPayment`
   - `sendNotification`
+  - `ping`
 
 ## Nested Field Paths Available
 
@@ -266,11 +269,11 @@ The example messages include the following nested field paths for testing autoco
 
 This file is ideal for testing component performance:
 
-- **File Size**: ~1.2 MB
-- **Load Time**: < 1 second
+- **File Size**: ~12 MB
+- **Load Time**: < 2 seconds
 - **Filtering**: Instant with pagination
 - **Memory Usage**: Optimized with O(1) operations
-- **Pagination**: 50 messages per page = 42 pages
+- **Pagination**: 50 messages per page = 240 pages
 - **JSON Parsing**: Lazy (only when expanding)
 
 ## Use Cases
