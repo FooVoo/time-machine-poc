@@ -6,7 +6,9 @@
   let isConnected = false;
   let messages = [];
   let autoCapture = false;
+  let replayMode = false;
   let statusMessage = '';
+  let messageHistory = []; // Imported history for replay mode
 
   function connect() {
     try {
@@ -51,7 +53,9 @@
 
   function clearMessages() {
     messages = [];
-    statusMessage = 'Messages cleared';
+    messageHistory = [];
+    replayMode = false;
+    statusMessage = 'Messages and history cleared';
   }
 
   function exportMessages() {
@@ -73,8 +77,9 @@
       reader.onload = (e) => {
         try {
           const imported = JSON.parse(e.target.result);
-          messages = Array.isArray(imported) ? imported : [];
-          statusMessage = `Imported ${messages.length} messages`;
+          messageHistory = Array.isArray(imported) ? imported : [];
+          messages = [...messageHistory];
+          statusMessage = `Imported ${messageHistory.length} messages`;
         } catch (error) {
           statusMessage = 'Import failed: Invalid JSON';
         }
@@ -83,8 +88,57 @@
     }
   }
 
+  function findMatchingResponse(sentData) {
+    // Find the sent message in history
+    for (let i = 0; i < messageHistory.length; i++) {
+      if (messageHistory[i].type === 'sent' && messageHistory[i].data === sentData) {
+        // Look for the next received message after this sent message
+        for (let j = i + 1; j < messageHistory.length; j++) {
+          if (messageHistory[j].type === 'received') {
+            return messageHistory[j].data;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   function sendMessage(messageData) {
     if (ws && isConnected) {
+      if (replayMode) {
+        // In replay mode, intercept and try to match against history
+        const matchingResponse = findMatchingResponse(messageData);
+        
+        if (matchingResponse) {
+          // Found a match - simulate the response locally
+          if (autoCapture) {
+            const sentMsg = {
+              timestamp: new Date().toISOString(),
+              type: 'sent',
+              data: messageData
+            };
+            messages = [...messages, sentMsg];
+            
+            // Simulate receiving the matching response after a short delay
+            setTimeout(() => {
+              const receivedMsg = {
+                timestamp: new Date().toISOString(),
+                type: 'received',
+                data: matchingResponse
+              };
+              messages = [...messages, receivedMsg];
+              statusMessage = 'Replayed from history';
+            }, 100);
+          }
+          // Don't send to actual WebSocket - intercepted
+          return;
+        } else {
+          // No match found - pass through to actual WebSocket
+          statusMessage = 'No match in history, passing through';
+        }
+      }
+      
+      // Normal mode or pass-through: send to actual WebSocket
       ws.send(messageData);
       if (autoCapture) {
         const message = {
@@ -144,6 +198,15 @@
       <input type="checkbox" bind:checked={autoCapture} />
       Auto-capture messages
     </label>
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={replayMode} disabled={messageHistory.length === 0} />
+      Replay mode (intercept and match against history)
+    </label>
+    {#if messageHistory.length > 0}
+      <div class="history-info">
+        📚 History loaded: {messageHistory.length} messages available for replay
+      </div>
+    {/if}
   </div>
 
   {#if isConnected}
@@ -361,6 +424,9 @@
     border-radius: 8px;
     margin-bottom: 20px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .checkbox-label {
@@ -374,6 +440,20 @@
 
   .checkbox-label input[type="checkbox"] {
     cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+  }
+
+  .history-info {
+    padding: 10px;
+    background: #e7f3ff;
+    border-left: 4px solid #2196f3;
+    border-radius: 4px;
+    color: #1565c0;
+    font-size: 14px;
+    margin-top: 5px;
   }
 
   .send-panel {

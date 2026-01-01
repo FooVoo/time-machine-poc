@@ -6,6 +6,7 @@ A Svelte-based web component for capturing, exporting, and importing WebSocket m
 
 - 🔌 **WebSocket Connection Management**: Connect to any WebSocket server
 - 📝 **Message Capture**: Auto-capture incoming and outgoing messages
+- 🔄 **Replay Mode**: Intercept outgoing messages and replay matching responses from history
 - 💾 **Export Messages**: Save captured messages as JSON files
 - 📂 **Import Messages**: Load previously saved message sessions
 - 🎨 **Modern UI**: Clean, intuitive interface with real-time status updates
@@ -76,12 +77,34 @@ This starts a WebSocket server on `ws://localhost:8080` that echoes back any mes
 
 ## How to Use
 
+### Basic Usage
+
 1. **Connect**: Enter a WebSocket URL (e.g., `ws://localhost:8080`) and click "Connect"
 2. **Enable Capture**: Check "Auto-capture messages" to start recording
 3. **Send Messages**: Type messages in the send field and press Enter or click "Send"
 4. **Export**: Click "Export Messages" to download captured messages as JSON
 5. **Import**: Click "Import Messages" to load a previously saved session
 6. **Clear**: Click "Clear Messages" to remove all captured messages
+
+### Replay Mode (Mock/Intercept Mode)
+
+Replay mode allows you to intercept outgoing WebSocket messages and replay responses from a previously imported message history, useful for testing and development without a live server.
+
+1. **Import History**: First, import a message history file using "Import Messages"
+2. **Enable Replay Mode**: Check "Replay mode (intercept and match against history)"
+3. **Connect**: Connect to any WebSocket URL (can be a dummy URL if you only want replayed responses)
+4. **Send Messages**: When you send a message that matches a "sent" message in the history:
+   - The message is **intercepted** (not sent to the actual WebSocket server)
+   - The corresponding "received" message from history is automatically replayed
+   - Status shows "Replayed from history"
+5. **Pass-Through**: Messages that don't match the history are passed through to the actual WebSocket server
+   - Status shows "No match in history, passing through"
+
+This feature is perfect for:
+- Testing frontend behavior with known server responses
+- Development without backend availability
+- Reproducing specific message sequences
+- API mocking and stubbing
 
 ## Message Format
 
