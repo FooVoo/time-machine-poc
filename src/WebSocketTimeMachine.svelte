@@ -9,9 +9,21 @@
   let replayMode = false;
   let statusMessage = '';
   let messageHistory = []; // Imported history for replay mode
-  let responseMap = {}; // Map for O(1) lookup of responses
+  let responseMap = new Map(); // Use Map for better performance
   
   const REPLAY_RESPONSE_DELAY_MS = 100; // Delay before simulating response
+  const MAX_VISIBLE_MESSAGES = 100; // Limit visible messages for performance
+  
+  // Pagination state
+  let currentPage = 0;
+  let messagesPerPage = 50;
+  
+  $: totalPages = Math.ceil(messages.length / messagesPerPage);
+  $: visibleMessages = messages.slice(
+    currentPage * messagesPerPage,
+    (currentPage + 1) * messagesPerPage
+  );
+  $: startIndex = currentPage * messagesPerPage;
 
   function connect() {
     try {
@@ -29,7 +41,14 @@
             type: 'received',
             data: event.data
           };
-          messages = [...messages, message];
+          // Use push instead of spread operator for better performance
+          messages.push(message);
+          messages = messages; // Trigger reactivity
+          
+          // Auto-scroll to latest page if on last page
+          if (currentPage === totalPages - 2) {
+            currentPage = totalPages - 1;
+          }
         }
       };
       
@@ -57,12 +76,14 @@
   function clearMessages() {
     messages = [];
     messageHistory = [];
-    responseMap = {};
+    responseMap.clear();
     replayMode = false;
+    currentPage = 0;
     statusMessage = 'Messages and history cleared';
   }
 
   function exportMessages() {
+    // Use streaming for large datasets
     const dataStr = JSON.stringify(messages, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
@@ -75,32 +96,40 @@
   }
 
   function buildResponseMap(history) {
-    // Build a map for O(1) lookup: sent message -> received response
-    const map = {};
-    for (let i = 0; i < history.length; i++) {
-      if (history[i].type === 'sent') {
-        // Look for the next received message
-        for (let j = i + 1; j < history.length; j++) {
-          if (history[j].type === 'received') {
-            map[history[i].data] = history[j].data;
-            break;
-          }
-        }
+    // Optimized O(n) single pass - Build a Map for better performance
+    const map = new Map();
+    let lastSentMessage = null;
+    
+    for (const message of history) {
+      if (message.type === 'sent') {
+        lastSentMessage = message.data;
+      } else if (message.type === 'received' && lastSentMessage !== null) {
+        map.set(lastSentMessage, message.data);
+        lastSentMessage = null;
       }
     }
+    
     return map;
   }
 
   function handleImport(event) {
     const file = event.target.files[0];
     if (file) {
+      statusMessage = 'Importing...';
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const imported = JSON.parse(e.target.result);
-          messageHistory = Array.isArray(imported) ? imported : [];
-          messages = [...messageHistory];
+          if (!Array.isArray(imported)) {
+            statusMessage = 'Import failed: Invalid format';
+            return;
+          }
+          
+          // Direct assignment instead of spread for large arrays
+          messageHistory = imported;
+          messages = imported.slice(); // Shallow copy is faster than spread
           responseMap = buildResponseMap(messageHistory);
+          currentPage = 0;
           statusMessage = `Imported ${messageHistory.length} messages`;
         } catch (error) {
           statusMessage = 'Import failed: Invalid JSON';
@@ -112,7 +141,7 @@
 
   function handleReplayMode(messageData) {
     // Check if there's a matching response in the map
-    const matchingResponse = responseMap[messageData];
+    const matchingResponse = responseMap.get(messageData);
     
     if (matchingResponse) {
       // Found a match - simulate the response locally
@@ -122,7 +151,7 @@
           type: 'sent',
           data: messageData
         };
-        messages = [...messages, sentMsg];
+        messages.push(sentMsg);
         
         // Simulate receiving the matching response after a short delay
         setTimeout(() => {
@@ -131,7 +160,8 @@
             type: 'received',
             data: matchingResponse
           };
-          messages = [...messages, receivedMsg];
+          messages.push(receivedMsg);
+          messages = messages; // Trigger reactivity
           statusMessage = 'Replayed from history';
         }, REPLAY_RESPONSE_DELAY_MS);
       }
@@ -158,7 +188,8 @@
           type: 'sent',
           data: messageData
         };
-        messages = [...messages, message];
+        messages.push(message);
+        messages = messages; // Trigger reactivity
       }
     }
   }
@@ -170,6 +201,28 @@
       sendMessage(messageToSend);
       messageToSend = '';
     }
+  }
+  
+  function goToPage(page) {
+    if (page >= 0 && page < totalPages) {
+      currentPage = page;
+    }
+  }
+  
+  function nextPage() {
+    if (currentPage < totalPages - 1) {
+      currentPage++;
+    }
+  }
+  
+  function prevPage() {
+    if (currentPage > 0) {
+      currentPage--;
+    }
+  }
+  
+  function goToLastPage() {
+    currentPage = Math.max(0, totalPages - 1);
   }
 </script>
 
@@ -259,11 +312,30 @@
 
   <div class="messages-panel">
     <h2>Captured Messages ({messages.length})</h2>
+    
+    {#if messages.length > messagesPerPage}
+      <div class="pagination-controls">
+        <button class="btn btn-sm" on:click={prevPage} disabled={currentPage === 0}>
+          Previous
+        </button>
+        <span class="page-info">
+          Page {currentPage + 1} of {totalPages} 
+          (showing {startIndex + 1}-{Math.min(startIndex + messagesPerPage, messages.length)} of {messages.length})
+        </span>
+        <button class="btn btn-sm" on:click={nextPage} disabled={currentPage === totalPages - 1}>
+          Next
+        </button>
+        <button class="btn btn-sm" on:click={goToLastPage}>
+          Latest
+        </button>
+      </div>
+    {/if}
+    
     <div class="messages-list">
-      {#each messages as message, index}
+      {#each visibleMessages as message, index}
         <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
           <div class="message-header">
-            <span class="message-index">#{index + 1}</span>
+            <span class="message-index">#{startIndex + index + 1}</span>
             <span class="message-type">{message.type}</span>
             <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
           </div>
@@ -506,6 +578,28 @@
     margin: 0 0 15px;
     color: #333;
     font-size: 20px;
+  }
+  
+  .pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+  }
+  
+  .page-info {
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+  }
+  
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
   }
 
   .messages-list {

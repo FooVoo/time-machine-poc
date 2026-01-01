@@ -11,6 +11,7 @@ A Svelte-based web component for capturing, exporting, and importing WebSocket m
 - 📂 **Import Messages**: Load previously saved message sessions
 - 🎨 **Modern UI**: Clean, intuitive interface with real-time status updates
 - 🧩 **Web Component**: Built as a custom element for easy integration
+- ⚡ **High Performance**: Optimized to handle large datasets (5-10MB, thousands of messages)
 
 ## Installation
 
@@ -131,6 +132,19 @@ Exported messages are saved in JSON format:
 - **Build Tool**: Vite 7
 - **Output**: Custom Element (Web Component)
 - **Browser Support**: Modern browsers with Web Components support
+
+## Performance
+
+The component is optimized to handle large message datasets efficiently:
+
+- **Pagination**: Messages are displayed in pages of 50 for smooth scrolling
+- **Optimized Operations**: Array operations use `push()` instead of spread operator
+- **Efficient Lookups**: Map-based response matching for O(1) performance
+- **Single-Pass Algorithms**: O(n) complexity for building response maps
+
+For detailed performance information, see [PERFORMANCE.md](PERFORMANCE.md).
+
+**Tested with**: 10,000+ messages, 5-10MB JSON files
 
 ## License
 
