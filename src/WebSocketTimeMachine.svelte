@@ -17,6 +17,10 @@
   let availableFields = [];
   let expandedMessages = new Set();
   
+  // Constants
+  const AUTOCOMPLETE_BLUR_DELAY = 200;
+  const MAX_AUTOCOMPLETE_SUGGESTIONS = 10;
+  
   // Pagination state
   let currentPage = 0;
   let messagesPerPage = 50;
@@ -357,13 +361,13 @@
             type="text" 
             bind:value={customFilterField}
             on:focus={() => showFieldSuggestions = true}
-            on:blur={() => setTimeout(() => showFieldSuggestions = false, 200)}
+            on:blur={() => setTimeout(() => showFieldSuggestions = false, AUTOCOMPLETE_BLUR_DELAY)}
             placeholder="e.g. data.userId, type, timestamp"
             autocomplete="off"
           />
           {#if showFieldSuggestions && filteredFieldSuggestions.length > 0}
             <div class="autocomplete-dropdown">
-              {#each filteredFieldSuggestions.slice(0, 10) as field}
+              {#each filteredFieldSuggestions.slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS) as field}
                 <div 
                   class="autocomplete-item"
                   role="button"
@@ -374,6 +378,7 @@
                   }}
                   on:keydown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
                       customFilterField = field;
                       showFieldSuggestions = false;
                     }
@@ -382,9 +387,9 @@
                   {field}
                 </div>
               {/each}
-              {#if filteredFieldSuggestions.length > 10}
+              {#if filteredFieldSuggestions.length > MAX_AUTOCOMPLETE_SUGGESTIONS}
                 <div class="autocomplete-more">
-                  +{filteredFieldSuggestions.length - 10} more...
+                  +{filteredFieldSuggestions.length - MAX_AUTOCOMPLETE_SUGGESTIONS} more...
                 </div>
               {/if}
             </div>
@@ -553,6 +558,10 @@
 </div>
 
 <style>
+  :host {
+    --json-viewer-max-height: 400px;
+  }
+  
   .container {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     max-width: 900px;
@@ -929,7 +938,7 @@
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     overflow: auto;
-    max-height: 400px;
+    max-height: var(--json-viewer-max-height);
   }
   
   .json-content {
