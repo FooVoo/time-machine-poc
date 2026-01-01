@@ -1,33 +1,33 @@
 # Angular Integration for WebSocket Time Machine
 
-This directory contains the Angular integration files for adding replay mode functionality to your existing `WsService`.
+This directory contains the Angular integration files for adding message viewing, filtering, and grouping functionality to your existing `WsService`.
 
 ## Files
 
-- `ws-replay.service.ts` - Replay service that manages message history and interception
-- `ws-service-integration-example.ts` - Complete integration example with code samples
-- `ws-time-machine-controls.component.ts` - Example Angular component with UI controls
+- `ws-replay.service.ts` - Message viewer service for filtering and grouping (renamed from ws-replay.service.ts)
+- `ws-service-integration-example.ts` - Complete integration example (updated for view-only mode)
+- `ws-time-machine-controls.component.ts` - Example Angular component with UI controls (updated)
 
 ## Quick Start
 
-### 1. Add the WsReplayService to your project
+### 1. Add the WsMessageViewerService to your project
 
-Copy `ws-replay.service.ts` to your Angular project's services directory.
+Copy `ws-replay.service.ts` to your Angular project's services directory (consider renaming to `ws-message-viewer.service.ts`).
 
-### 2. Inject the service into your WsService
+### 2. Inject the service into your components
 
 ```typescript
 constructor(
-    // ... existing dependencies
-    private wsReplayService: WsReplayService
+    private wsMessageViewerService: WsMessageViewerService
 ) {
-    // ... existing code
+    // Subscribe to messages from your WsService
+    // and add them to the viewer
 }
 ```
 
-### 3. Modify the _sendMessage method
+### 3. Capture messages in your WsService
 
-Update your `_sendMessage` method to check for replay mode:
+Update your `_sendMessage` and `_processActions` methods to capture messages:
 
 ```typescript
 private _sendMessage(request: RequestObject): void {

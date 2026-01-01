@@ -1,12 +1,13 @@
 # WebSocket Time Machine
 
-A Svelte-based web component for capturing, exporting, and importing WebSocket messages. This tool allows you to record WebSocket communications, save them for later analysis, and replay them.
+A Svelte-based web component for viewing, filtering, and analyzing WebSocket messages. This tool allows you to record WebSocket communications, save them for later analysis, and view them with advanced filtering and grouping capabilities.
 
 ## Features
 
-- 🔌 **WebSocket Connection Management**: Connect to any WebSocket server
-- 📝 **Message Capture**: Auto-capture incoming and outgoing messages
-- 🔄 **Replay Mode**: Intercept outgoing messages and replay matching responses from history
+- 🔌 **WebSocket Connection Management**: Connect to any WebSocket server (view-only mode)
+- 📝 **Message Capture**: Auto-capture incoming messages
+- 🔍 **Filter by Request ID**: Filter messages by requestId field
+- 📊 **Group by Request ID**: Group related request/response pairs by their requestId
 - 💾 **Export Messages**: Save captured messages as JSON files
 - 📂 **Import Messages**: Load previously saved message sessions
 - 🎨 **Modern UI**: Clean, intuitive interface with real-time status updates
@@ -81,31 +82,26 @@ This starts a WebSocket server on `ws://localhost:8080` that echoes back any mes
 ### Basic Usage
 
 1. **Connect**: Enter a WebSocket URL (e.g., `ws://localhost:8080`) and click "Connect"
-2. **Enable Capture**: Check "Auto-capture messages" to start recording
-3. **Send Messages**: Type messages in the send field and press Enter or click "Send"
+2. **Enable Capture**: Check "Auto-capture messages" to start recording incoming messages
+3. **View Messages**: Messages appear in the list below as they arrive
 4. **Export**: Click "Export Messages" to download captured messages as JSON
 5. **Import**: Click "Import Messages" to load a previously saved session
 6. **Clear**: Click "Clear Messages" to remove all captured messages
 
-### Replay Mode (Mock/Intercept Mode)
+### Filtering and Grouping
 
-Replay mode allows you to intercept outgoing WebSocket messages and replay responses from a previously imported message history, useful for testing and development without a live server.
+The component supports advanced filtering and grouping of messages by `requestId`:
 
-1. **Import History**: First, import a message history file using "Import Messages"
-2. **Enable Replay Mode**: Check "Replay mode (intercept and match against history)"
-3. **Connect**: Connect to any WebSocket URL (can be a dummy URL if you only want replayed responses)
-4. **Send Messages**: When you send a message that matches a "sent" message in the history:
-   - The message is **intercepted** (not sent to the actual WebSocket server)
-   - The corresponding "received" message from history is automatically replayed
-   - Status shows "Replayed from history"
-5. **Pass-Through**: Messages that don't match the history are passed through to the actual WebSocket server
-   - Status shows "No match in history, passing through"
+1. **Filter by Request ID**: Enter a request ID in the filter field to show only messages containing that ID
+2. **Group by Request ID**: Check "Group by Request ID" to group related request/response pairs together
 
-This feature is perfect for:
-- Testing frontend behavior with known server responses
-- Development without backend availability
-- Reproducing specific message sequences
-- API mocking and stubbing
+This is useful for:
+- Finding specific request/response pairs in large message logs
+- Analyzing message flow for specific operations
+- Debugging request/response cycles
+- Understanding message patterns
+
+**Note**: Filtering and grouping require that messages have a `requestId` field in their JSON data.
 
 ## Message Format
 
@@ -116,15 +112,17 @@ Exported messages are saved in JSON format:
   {
     "timestamp": "2026-01-01T06:00:00.000Z",
     "type": "received",
-    "data": "Hello from server"
+    "data": "{\"requestId\": \"abc123\", \"message\": \"Hello from server\"}"
   },
   {
     "timestamp": "2026-01-01T06:00:01.000Z",
     "type": "sent",
-    "data": "Hello from client"
+    "data": "{\"requestId\": \"abc123\", \"message\": \"Hello from client\"}"
   }
 ]
 ```
+
+For filtering and grouping to work, the `data` field should contain JSON with a `requestId` field.
 
 ## Technical Details
 

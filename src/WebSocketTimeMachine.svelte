@@ -6,23 +6,60 @@
   let isConnected = false;
   let messages = [];
   let autoCapture = false;
-  let replayMode = false;
   let statusMessage = '';
-  let messageHistory = []; // Imported history for replay mode
-  let responseMap = new Map(); // Use Map for better performance
   
-  const REPLAY_RESPONSE_DELAY_MS = 100; // Delay before simulating response
+  // Filtering and grouping
+  let filterRequestId = '';
+  let groupByRequestId = false;
   
   // Pagination state
   let currentPage = 0;
   let messagesPerPage = 50;
   
-  $: totalPages = Math.ceil(messages.length / messagesPerPage);
-  $: visibleMessages = messages.slice(
+  // Computed values for filtering and grouping
+  $: filteredMessages = filterRequestId 
+    ? messages.filter(msg => {
+        try {
+          const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+          return data.requestId && data.requestId.includes(filterRequestId);
+        } catch {
+          return false;
+        }
+      })
+    : messages;
+  
+  $: groupedMessages = groupByRequestId ? groupMessagesByRequestId(filteredMessages) : null;
+  
+  $: displayMessages = groupByRequestId ? [] : filteredMessages;
+  
+  $: totalPages = Math.ceil(displayMessages.length / messagesPerPage);
+  $: visibleMessages = displayMessages.slice(
     currentPage * messagesPerPage,
     (currentPage + 1) * messagesPerPage
   );
   $: startIndex = currentPage * messagesPerPage;
+  
+  function groupMessagesByRequestId(msgs) {
+    const groups = new Map();
+    
+    for (const msg of msgs) {
+      try {
+        const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+        const requestId = data.requestId;
+        
+        if (requestId) {
+          if (!groups.has(requestId)) {
+            groups.set(requestId, []);
+          }
+          groups.get(requestId).push(msg);
+        }
+      } catch {
+        // Skip messages that can't be parsed
+      }
+    }
+    
+    return groups;
+  }
 
   function connect() {
     try {
@@ -75,15 +112,12 @@
 
   function clearMessages() {
     messages = [];
-    messageHistory = [];
-    responseMap.clear();
-    replayMode = false;
     currentPage = 0;
-    statusMessage = 'Messages and history cleared';
+    filterRequestId = '';
+    statusMessage = 'Messages cleared';
   }
 
   function exportMessages() {
-    // Use streaming for large datasets
     const dataStr = JSON.stringify(messages, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
@@ -93,23 +127,6 @@
     link.click();
     URL.revokeObjectURL(url);
     statusMessage = 'Messages exported';
-  }
-
-  function buildResponseMap(history) {
-    // Optimized O(n) single pass - Build a Map for better performance
-    const map = new Map();
-    let lastSentMessage = null;
-    
-    for (const message of history) {
-      if (message.type === 'sent') {
-        lastSentMessage = message.data;
-      } else if (message.type === 'received' && lastSentMessage !== null) {
-        map.set(lastSentMessage, message.data);
-        lastSentMessage = null;
-      }
-    }
-    
-    return map;
   }
 
   function handleImport(event) {
@@ -125,81 +142,14 @@
             return;
           }
           
-          // Direct assignment instead of spread for large arrays
-          messageHistory = imported;
-          messages = imported.slice(); // Shallow copy is faster than spread
-          responseMap = buildResponseMap(messageHistory);
+          messages = imported.slice();
           currentPage = 0;
-          statusMessage = `Imported ${messageHistory.length} messages`;
+          statusMessage = `Imported ${messages.length} messages`;
         } catch (error) {
           statusMessage = 'Import failed: Invalid JSON';
         }
       };
       reader.readAsText(file);
-    }
-  }
-
-  function handleReplayMode(messageData) {
-    // Check if there's a matching response in the map
-    const matchingResponse = responseMap.get(messageData);
-    
-    if (matchingResponse) {
-      // Found a match - simulate the response locally
-      if (autoCapture) {
-        const sentMsg = {
-          timestamp: new Date().toISOString(),
-          type: 'sent',
-          data: messageData
-        };
-        messages.push(sentMsg);
-        
-        // Simulate receiving the matching response after a short delay
-        setTimeout(() => {
-          const receivedMsg = {
-            timestamp: new Date().toISOString(),
-            type: 'received',
-            data: matchingResponse
-          };
-          messages.push(receivedMsg);
-          messages = messages; // Trigger reactivity
-          statusMessage = 'Replayed from history';
-        }, REPLAY_RESPONSE_DELAY_MS);
-      }
-      return true; // Message was intercepted
-    }
-    
-    // No match found - will pass through
-    statusMessage = 'No match in history, passing through';
-    return false;
-  }
-
-  function sendMessage(messageData) {
-    if (ws && isConnected) {
-      // In replay mode, try to intercept and match against history
-      if (replayMode && handleReplayMode(messageData)) {
-        return; // Message was intercepted and replayed
-      }
-      
-      // Normal mode or pass-through: send to actual WebSocket
-      ws.send(messageData);
-      if (autoCapture) {
-        const message = {
-          timestamp: new Date().toISOString(),
-          type: 'sent',
-          data: messageData
-        };
-        messages.push(message);
-        messages = messages; // Trigger reactivity
-      }
-    }
-  }
-
-  let messageToSend = '';
-  
-  function handleSend() {
-    if (messageToSend.trim()) {
-      sendMessage(messageToSend);
-      messageToSend = '';
     }
   }
   
@@ -263,32 +213,23 @@
       <input type="checkbox" bind:checked={autoCapture} />
       Auto-capture messages
     </label>
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={replayMode} disabled={messageHistory.length === 0} />
-      Replay mode (intercept and match against history)
-    </label>
-    {#if messageHistory.length > 0}
-      <div class="history-info">
-        📚 History loaded: {messageHistory.length} messages available for replay
-      </div>
-    {/if}
   </div>
-
-  {#if isConnected}
-    <div class="send-panel">
-      <div class="input-group">
-        <label for="message">Send Message:</label>
-        <input 
-          id="message"
-          type="text" 
-          bind:value={messageToSend} 
-          placeholder="Enter message to send"
-          on:keypress={(e) => e.key === 'Enter' && handleSend()}
-        />
-      </div>
-      <button class="btn btn-secondary" on:click={handleSend}>Send</button>
+  
+  <div class="filter-panel">
+    <div class="input-group">
+      <label for="filter">Filter by Request ID:</label>
+      <input 
+        id="filter"
+        type="text" 
+        bind:value={filterRequestId} 
+        placeholder="Enter request ID to filter"
+      />
     </div>
-  {/if}
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={groupByRequestId} />
+      Group by Request ID
+    </label>
+  </div>
 
   <div class="actions-panel">
     <button class="btn btn-success" on:click={exportMessages} disabled={messages.length === 0}>
@@ -311,40 +252,68 @@
   </div>
 
   <div class="messages-panel">
-    <h2>Captured Messages ({messages.length})</h2>
+    <h2>Captured Messages ({filteredMessages.length}{filterRequestId ? ` filtered from ${messages.length}` : ''})</h2>
     
-    {#if messages.length > messagesPerPage}
-      <div class="pagination-controls">
-        <button class="btn btn-sm" on:click={prevPage} disabled={currentPage === 0}>
-          Previous
-        </button>
-        <span class="page-info">
-          Page {currentPage + 1} of {totalPages} 
-          (showing {startIndex + 1}-{Math.min(startIndex + messagesPerPage, messages.length)} of {messages.length})
-        </span>
-        <button class="btn btn-sm" on:click={nextPage} disabled={currentPage === totalPages - 1}>
-          Next
-        </button>
-        <button class="btn btn-sm" on:click={goToLastPage}>
-          Latest
-        </button>
+    {#if groupByRequestId && groupedMessages}
+      <!-- Grouped view by Request ID -->
+      <div class="grouped-messages">
+        {#each [...groupedMessages.entries()] as [requestId, msgs]}
+          <div class="request-group">
+            <div class="group-header">
+              <strong>Request ID:</strong> {requestId}
+              <span class="group-count">({msgs.length} messages)</span>
+            </div>
+            <div class="group-messages">
+              {#each msgs as message, index}
+                <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
+                  <div class="message-header">
+                    <span class="message-type">{message.type}</span>
+                    <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                  <div class="message-data">{message.data}</div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {:else}
+          <div class="empty-state">No messages with Request ID found</div>
+        {/each}
+      </div>
+    {:else}
+      <!-- Regular list view with pagination -->
+      {#if !groupByRequestId && displayMessages.length > messagesPerPage}
+        <div class="pagination-controls">
+          <button class="btn btn-sm" on:click={prevPage} disabled={currentPage === 0}>
+            Previous
+          </button>
+          <span class="page-info">
+            Page {currentPage + 1} of {totalPages} 
+            (showing {startIndex + 1}-{Math.min(startIndex + messagesPerPage, displayMessages.length)} of {displayMessages.length})
+          </span>
+          <button class="btn btn-sm" on:click={nextPage} disabled={currentPage === totalPages - 1}>
+            Next
+          </button>
+          <button class="btn btn-sm" on:click={goToLastPage}>
+            Latest
+          </button>
+        </div>
+      {/if}
+      
+      <div class="messages-list">
+        {#each visibleMessages as message, index}
+          <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
+            <div class="message-header">
+              <span class="message-index">#{startIndex + index + 1}</span>
+              <span class="message-type">{message.type}</span>
+              <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+            </div>
+            <div class="message-data">{message.data}</div>
+          </div>
+        {:else}
+          <div class="empty-state">No messages captured yet</div>
+        {/each}
       </div>
     {/if}
-    
-    <div class="messages-list">
-      {#each visibleMessages as message, index}
-        <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
-          <div class="message-header">
-            <span class="message-index">#{startIndex + index + 1}</span>
-            <span class="message-type">{message.type}</span>
-            <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
-          </div>
-          <div class="message-data">{message.data}</div>
-        </div>
-      {:else}
-        <div class="empty-state">No messages captured yet</div>
-      {/each}
-    </div>
   </div>
 </div>
 
@@ -444,15 +413,6 @@
     background: #c82333;
   }
 
-  .btn-secondary {
-    background: #6c757d;
-    color: white;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #545b62;
-  }
-
   .btn-success {
     background: #28a745;
     color: white;
@@ -512,6 +472,17 @@
     flex-direction: column;
     gap: 10px;
   }
+  
+  .filter-panel {
+    background: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
   .checkbox-label {
     display: flex;
@@ -528,32 +499,6 @@
 
   .checkbox-label input[type="checkbox"]:disabled {
     cursor: not-allowed;
-  }
-
-  .history-info {
-    padding: 10px;
-    background: #e7f3ff;
-    border-left: 4px solid #2196f3;
-    border-radius: 4px;
-    color: #1565c0;
-    font-size: 14px;
-    margin-top: 5px;
-  }
-
-  .send-panel {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
-  }
-
-  .send-panel .input-group {
-    flex: 1;
-    margin-bottom: 0;
   }
 
   .actions-panel {
@@ -659,5 +604,39 @@
     padding: 40px;
     color: #999;
     font-style: italic;
+  }
+  
+  .grouped-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .request-group {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  
+  .group-header {
+    background: #f8f9fa;
+    padding: 12px 15px;
+    border-bottom: 1px solid #ddd;
+    font-size: 14px;
+    color: #333;
+  }
+  
+  .group-count {
+    margin-left: 10px;
+    color: #666;
+    font-size: 12px;
+  }
+  
+  .group-messages {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 </style>

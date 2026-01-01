@@ -11,30 +11,21 @@ export interface TimeMachineMessage {
 }
 
 /**
- * WebSocket Replay Service
+ * WebSocket Message Viewer Service
  * 
- * Integrates with WsService to provide replay mode functionality
- * for intercepting and replaying WebSocket messages from history.
+ * Provides functionality for viewing, filtering, and grouping WebSocket messages
+ * by requestId. Integrates with WsService for message capture and viewing.
  */
 @Injectable({
     providedIn: 'root'
 })
-export class WsReplayService {
-    private _replayMode = false;
+export class WsMessageViewerService {
     private _messageHistory: TimeMachineMessage[] = [];
-    private _responseMap: Map<string, string> = new Map();
     
     /**
-     * Emits status messages about replay operations
+     * Emits status messages about operations
      */
-    readonly replayStatus$ = new Subject<string>();
-
-    /**
-     * Check if replay mode is currently enabled
-     */
-    get isReplayMode(): boolean {
-        return this._replayMode;
-    }
+    readonly status$ = new Subject<string>();
 
     /**
      * Get the current message history
@@ -44,26 +35,11 @@ export class WsReplayService {
     }
 
     /**
-     * Enable or disable replay mode
-     */
-    setReplayMode(enabled: boolean): void {
-        if (enabled && this._messageHistory.length === 0) {
-            console.warn('Cannot enable replay mode: no history loaded');
-            this.replayStatus$.next('Cannot enable replay mode: no history loaded');
-            return;
-        }
-        this._replayMode = enabled;
-        this.replayStatus$.next(enabled ? 'Replay mode enabled' : 'Replay mode disabled');
-    }
-
-    /**
      * Load message history from JSON data
-     * This should be called with the exported message history
      */
     loadHistory(history: TimeMachineMessage[]): void {
         this._messageHistory = history;
-        this._buildResponseMap();
-        this.replayStatus$.next(`Loaded ${history.length} messages into history`);
+        this.status$.next(`Loaded ${history.length} messages into history`);
     }
 
     /**
@@ -76,39 +52,62 @@ export class WsReplayService {
             this.loadHistory(history);
         } catch (error) {
             console.error('Failed to import history:', error);
-            this.replayStatus$.next('Failed to import history: Invalid JSON');
+            this.status$.next('Failed to import history: Invalid JSON');
             throw error;
         }
     }
 
     /**
-     * Clear the message history and disable replay mode
+     * Clear the message history
      */
     clearHistory(): void {
         this._messageHistory = [];
-        this._responseMap.clear();
-        this._replayMode = false;
-        this.replayStatus$.next('History cleared');
+        this.status$.next('History cleared');
     }
 
     /**
-     * Check if a message should be intercepted and get the replay response
-     * Returns the response data if found, null if message should pass through
+     * Filter messages by requestId
      */
-    getReplayResponse(messageData: string): string | null {
-        if (!this._replayMode) {
-            return null;
+    filterByRequestId(requestId: string): TimeMachineMessage[] {
+        if (!requestId) {
+            return this._messageHistory;
         }
-
-        const response = this._responseMap.get(messageData);
         
-        if (response) {
-            this.replayStatus$.next('Replayed from history');
-            return response;
-        } else {
-            this.replayStatus$.next('No match in history, passing through');
-            return null;
+        return this._messageHistory.filter(msg => {
+            try {
+                const data = JSON.parse(msg.data);
+                return data.requestId && data.requestId.includes(requestId);
+            } catch {
+                return false;
+            }
+        });
+    }
+
+    /**
+     * Group messages by requestId
+     * Returns a Map where keys are requestIds and values are arrays of messages
+     */
+    groupByRequestId(messages?: TimeMachineMessage[]): Map<string, TimeMachineMessage[]> {
+        const msgs = messages || this._messageHistory;
+        const groups = new Map<string, TimeMachineMessage[]>();
+        
+        for (const msg of msgs) {
+            try {
+                const data = JSON.parse(msg.data);
+                const requestId = data.requestId;
+                
+                if (requestId) {
+                    if (!groups.has(requestId)) {
+                        groups.set(requestId, []);
+                    }
+                    groups.get(requestId)!.push(msg);
+                }
+            } catch {
+                // Skip messages that can't be parsed
+            }
         }
+        
+        return groups;
     }
 
     /**
@@ -128,27 +127,5 @@ export class WsReplayService {
      */
     exportHistory(): string {
         return JSON.stringify(this._messageHistory, null, 2);
-    }
-
-    /**
-     * Build a response map for O(1) lookup
-     * Maps sent messages to their corresponding received responses
-     * Optimized to O(n) complexity
-     */
-    private _buildResponseMap(): void {
-        this._responseMap.clear();
-        
-        let lastSentMessage: string | null = null;
-        
-        // Single pass through the array - O(n)
-        for (const message of this._messageHistory) {
-            if (message.type === 'sent') {
-                lastSentMessage = message.data;
-            } else if (message.type === 'received' && lastSentMessage !== null) {
-                // Map the last sent message to this received message
-                this._responseMap.set(lastSentMessage, message.data);
-                lastSentMessage = null; // Reset to avoid duplicate mappings
-            }
-        }
     }
 }
