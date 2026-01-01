@@ -18,13 +18,64 @@
   let currentPage = $state(0);
   let messagesPerPage = $state(50);
 
-
+  // Worker-based filtering results
+  let filteredMessages = $state([]);
+  let groupedMessages = $state(null);
   let primitiveFields = new Set(); // Tracks which fields have primitive values
   let fieldValues = new Map(); // Maps field paths to their unique primitive values
+  let availableFields = $state([]);
+  
   let expandedMessages = $state(new Set());
   let expandedNestedPaths = $state(new Map()); // Tracks expanded paths within messages
 
-  let availableFields = $derived.by(() => getAllFieldPaths(messages));
+  // Worker instances
+  let filterWorker = null;
+  let isFiltering = $state(false);
+
+  // Initialize filter worker
+  function initFilterWorker() {
+    if (!filterWorker) {
+      filterWorker = new Worker(new URL('./messageFilter.worker.js', import.meta.url), { type: 'module' });
+      
+      filterWorker.onmessage = (event) => {
+        const { success, action, filtered, grouped, fields, primitiveFields: primFields, fieldValues: fValues } = event.data;
+        
+        if (success) {
+          if (action === 'filter') {
+            filteredMessages = filtered;
+            isFiltering = false;
+          } else if (action === 'group') {
+            // Convert array of entries back to Map
+            groupedMessages = new Map(grouped);
+            isFiltering = false;
+          } else if (action === 'extractFields') {
+            availableFields = fields;
+            primitiveFields = new Set(primFields);
+            fieldValues = new Map(fValues.map(([key, values]) => [key, new Set(values)]));
+          }
+        } else {
+          console.error('Worker error:', event.data.error);
+          isFiltering = false;
+        }
+      };
+      
+      filterWorker.onerror = (error) => {
+        console.error('Filter worker error:', error);
+        isFiltering = false;
+      };
+    }
+  }
+
+  // Cleanup worker on unmount
+  $effect(() => {
+    return () => {
+      if (filterWorker) {
+        filterWorker.terminate();
+        filterWorker = null;
+      }
+    };
+  });
+
   let fieldIsFilterable = $derived(primitiveFields.has(customFilterField));
   let availableValues = $derived.by(() => {
     if (!fieldIsFilterable) return [];
@@ -34,22 +85,54 @@
     return Array.from(fieldValues.get(customFilterField)).sort();
   });
 
-  let filteredByRequestId = $derived.by(() => {
-    if (!filterRequestId) return messages;
-
-    return messages.filter(msg => {
-              const data = parseMessageData(msg);
-              return data && data.requestId && data.requestId.includes(filterRequestId);
-            });
+  // Trigger filtering when filter values change
+  $effect(() => {
+    if (messages.length > 0) {
+      initFilterWorker();
+      isFiltering = true;
+      
+      filterWorker.postMessage({
+        action: 'filter',
+        messages: messages,
+        filterRequestId: filterRequestId,
+        customFilterField: customFilterField,
+        customFilterValue: customFilterValue
+      });
+    } else {
+      filteredMessages = [];
+    }
   });
 
-  let filteredMessages = $derived(filterByCustomField(filteredByRequestId));
+  // Trigger grouping when needed
+  $effect(() => {
+    if (groupByRequestId && filteredMessages.length > 0) {
+      initFilterWorker();
+      isFiltering = true;
+      
+      filterWorker.postMessage({
+        action: 'group',
+        messages: filteredMessages
+      });
+    } else {
+      groupedMessages = null;
+    }
+  });
 
-  let groupedMessages = $derived.by(() => {
-    if (!groupByRequestId) return null;
-
-    return groupMessagesByRequestId(filteredMessages);
-  })
+  // Extract field paths when messages change
+  $effect(() => {
+    if (messages.length > 0) {
+      initFilterWorker();
+      
+      filterWorker.postMessage({
+        action: 'extractFields',
+        messages: messages
+      });
+    } else {
+      availableFields = [];
+      primitiveFields = new Set();
+      fieldValues = new Map();
+    }
+  });
 
   let totalPages = $derived(Math.ceil(filteredMessages.length / messagesPerPage));
 
@@ -111,120 +194,6 @@
     } catch {
       return null;
     }
-  }
-
-  // Extract all field paths from an object (including nested) and track primitives
-  function extractFieldPaths(obj, prefix = '', primFields, valuesMap) {
-    const paths = [];
-
-    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-      for (const key in obj) {
-        const path = prefix ? `${prefix}.${key}` : key;
-        const value = obj[key];
-        paths.push(path);
-
-        // Check if value is primitive (string, number, boolean, null)
-        const isPrimitive = value === null ||
-                          typeof value === 'string' ||
-                          typeof value === 'number' ||
-                          typeof value === 'boolean';
-
-        if (isPrimitive) {
-          primFields.add(path);
-
-          // Store unique values for this field
-          if (!valuesMap.has(path)) {
-            valuesMap.set(path, new Set());
-          }
-          if (value !== null) {
-            valuesMap.get(path).add(String(value));
-          }
-        } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          paths.push(...extractFieldPaths(value, path, primFields, valuesMap));
-        }
-      }
-    }
-
-    return paths;
-  }
-
-  // Get all available field paths from messages and track primitive fields
-  function getAllFieldPaths(msgs) {
-    const fieldsSet = new Set();
-    const primFields = new Set();
-    const valuesMap = new Map();
-
-    for (const msg of msgs) {
-      // Add top-level message fields
-      fieldsSet.add('type');
-      fieldsSet.add('timestamp');
-
-      // Top-level fields are primitives
-      primFields.add('type');
-      primFields.add('timestamp');
-
-      // Track top-level values
-      if (!valuesMap.has('type')) valuesMap.set('type', new Set());
-      if (!valuesMap.has('timestamp')) valuesMap.set('timestamp', new Set());
-      valuesMap.get('type').add(String(msg.type));
-      valuesMap.get('timestamp').add(String(msg.timestamp));
-
-      // Parse and add nested data fields
-      const data = parseMessageData(msg);
-      if (data) {
-        const dataPaths = extractFieldPaths(data, 'data', primFields, valuesMap);
-        dataPaths.forEach(path => fieldsSet.add(path));
-      }
-    }
-
-    // Update global state
-    primitiveFields = primFields;
-    fieldValues = valuesMap;
-
-    return Array.from(fieldsSet).sort();
-  }
-
-  // Get value from nested path
-  function getNestedValue(obj, path) {
-    const parts = path.split('.');
-    let value = obj;
-
-    for (const part of parts) {
-      if (value && typeof value === 'object' && part in value) {
-        value = value[part];
-      } else {
-        return undefined;
-      }
-    }
-
-    return value;
-  }
-
-  // Filter messages by custom field
-  function filterByCustomField(msgs) {
-    if (!customFilterField || !customFilterValue) {
-      return msgs;
-    }
-
-    return msgs.filter(msg => {
-      let value;
-
-      if (customFilterField.startsWith('data.')) {
-        const data = parseMessageData(msg);
-        if (!data) return false;
-        const fieldPath = customFilterField.substring(5); // Remove 'data.' prefix
-        value = getNestedValue(data, fieldPath);
-      } else {
-        value = msg[customFilterField];
-      }
-
-      if (value === undefined || value === null) return false;
-
-      const valueStr = String(value).toLowerCase();
-      const filterStr = customFilterValue.toLowerCase();
-
-      return valueStr.includes(filterStr);
-    });
   }
 
   // Toggle message expansion
@@ -290,24 +259,6 @@
       return `Object {${keys.length} ${keys.length === 1 ? 'property' : 'properties'}}`;
     }
     return formatValue(value);
-  }
-
-  function groupMessagesByRequestId(msgs) {
-    const groups = new Map();
-
-    for (const msg of msgs) {
-      const data = parseMessageData(msg);
-      const requestId = data?.requestId;
-
-      if (requestId) {
-        if (!groups.has(requestId)) {
-          groups.set(requestId, []);
-        }
-        groups.get(requestId).push(msg);
-      }
-    }
-
-    return groups;
   }
 
   function connect() {
@@ -384,19 +335,41 @@
       statusMessage = 'Импорт...';
       const reader = new FileReader();
       reader.onload = (e) => {
-        try {
-          const imported = typeof e.target.result === 'string' ? JSON.parse(e.target.result) : JSON.parse(new TextDecoder().decode(e.target.result));
-          if (!Array.isArray(imported)) {
-            statusMessage = 'Ошибка импорта: Неверный формат';
-            return;
+        const fileContent = typeof e.target.result === 'string' 
+          ? e.target.result 
+          : new TextDecoder().decode(e.target.result);
+        
+        // Create a new Web Worker for parsing JSON
+        const worker = new Worker(new URL('./jsonParser.worker.js', import.meta.url), { type: 'module' });
+        
+        // Handle messages from the worker
+        worker.onmessage = (event) => {
+          const { success, data, error } = event.data;
+          
+          if (success) {
+            if (!Array.isArray(data)) {
+              statusMessage = 'Ошибка импорта: Неверный формат';
+            } else {
+              messages = data.slice();
+              currentPage = 0;
+              statusMessage = `Импортировано ${messages.length} ${getMessageWord(messages.length)}`;
+            }
+          } else {
+            statusMessage = `Ошибка импорта: ${error}`;
           }
-
-          messages = imported.slice();
-          currentPage = 0;
-          statusMessage = `Импортировано ${messages.length} ${getMessageWord(messages.length)}`;
-        } catch (error) {
+          
+          // Terminate the worker after use
+          worker.terminate();
+        };
+        
+        // Handle worker errors
+        worker.onerror = (error) => {
           statusMessage = 'Ошибка импорта: Некорректный JSON';
-        }
+          worker.terminate();
+        };
+        
+        // Send the file content to the worker for parsing
+        worker.postMessage({ fileContent });
       };
       reader.readAsText(file);
     }
