@@ -133,22 +133,21 @@ export class WsReplayService {
     /**
      * Build a response map for O(1) lookup
      * Maps sent messages to their corresponding received responses
+     * Optimized to O(n) complexity
      */
     private _buildResponseMap(): void {
         this._responseMap.clear();
         
-        for (let i = 0; i < this._messageHistory.length; i++) {
-            if (this._messageHistory[i].type === 'sent') {
-                // Look for the next received message
-                for (let j = i + 1; j < this._messageHistory.length; j++) {
-                    if (this._messageHistory[j].type === 'received') {
-                        this._responseMap.set(
-                            this._messageHistory[i].data,
-                            this._messageHistory[j].data
-                        );
-                        break;
-                    }
-                }
+        let lastSentMessage: string | null = null;
+        
+        // Single pass through the array - O(n)
+        for (const message of this._messageHistory) {
+            if (message.type === 'sent') {
+                lastSentMessage = message.data;
+            } else if (message.type === 'received' && lastSentMessage !== null) {
+                // Map the last sent message to this received message
+                this._responseMap.set(lastSentMessage, message.data);
+                lastSentMessage = null; // Reset to avoid duplicate mappings
             }
         }
     }

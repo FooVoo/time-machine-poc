@@ -5,7 +5,8 @@ This directory contains the Angular integration files for adding replay mode fun
 ## Files
 
 - `ws-replay.service.ts` - Replay service that manages message history and interception
-- `ws-service-integration.md` - Integration guide with code examples
+- `ws-service-integration-example.ts` - Complete integration example with code samples
+- `ws-time-machine-controls.component.ts` - Example Angular component with UI controls
 
 ## Quick Start
 
@@ -173,3 +174,39 @@ export class StoreDebugService {
 ## Example: Complete Integration
 
 See `ws-service-integration-example.ts` for a complete example of the modified WsService.
+
+## Dependencies
+
+### WsReplayService
+- RxJS (included with Angular)
+- No additional dependencies required
+
+### WsTimeMachineControlsComponent (UI Example)
+The example component uses:
+- **ng-zorro-antd** - UI library for buttons, icons, and checkbox
+- **@angular/forms** - Required for `[(ngModel)]` directive (FormsModule must be imported)
+
+To use the example component, ensure these are installed:
+```bash
+npm install ng-zorro-antd
+```
+
+And import required modules in your Angular module:
+```typescript
+import { FormsModule } from '@angular/forms';
+import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
+
+@NgModule({
+  imports: [
+    FormsModule,
+    NzButtonModule,
+    NzIconModule,
+    NzCheckboxModule,
+    // ... other imports
+  ]
+})
+```
+
+Alternatively, you can create your own UI component with your preferred UI library.

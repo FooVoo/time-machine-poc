@@ -518,9 +518,7 @@ export class WsService {
                     
                     // Register in debug service
                     if (environment.debug) {
-                        actions.forEach(action => {
-                            this.storeDebugService.registerMessage(action);
-                        });
+                        actions.forEach(action => this.storeDebugService.registerMessage(action));
                     }
                     
                     // Emit to subject as if it came from the WebSocket
