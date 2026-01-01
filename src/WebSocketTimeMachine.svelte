@@ -1,47 +1,146 @@
+/**
+ * @fileoverview WebSocket Time Machine Web Component
+ * 
+ * A Svelte-based web component for capturing, filtering, and replaying WebSocket messages.
+ * Designed to handle large datasets (12,000+ messages) efficiently using Web Workers.
+ * 
+ * @customElement websocket-time-machine
+ * 
+ * @example
+ * <!-- Usage in HTML -->
+ * <websocket-time-machine></websocket-time-machine>
+ * 
+ * @example
+ * // Usage in Angular
+ * import 'websocket-time-machine';
+ * // In template:
+ * <websocket-time-machine></websocket-time-machine>
+ * 
+ * @architecture
+ * - Main thread: UI rendering + 50 visible messages (~100KB memory)
+ * - Web Worker: Stores all 12K messages (~12MB isolated memory)
+ * - Communication: Slice-based pagination to minimize data transfer
+ */
 <svelte:options customElement="websocket-time-machine" />
 
 <script>
   import { parseMessageData } from './messageUtils.js';
   
+  // ============================================================================
+  // STATE: WebSocket Connection
+  // ============================================================================
+  
+  /** @type {string} WebSocket URL to connect to */
   let wsUrl = $state('');
+  
+  /** @type {WebSocket|null} Active WebSocket connection */
   let ws = null;
+  
+  /** @type {boolean} Whether WebSocket is currently connected */
   let isConnected = $state(false);
+  
+  /** @type {boolean} Whether to automatically capture incoming messages */
   let autoCapture = $state(false);
+  
+  /** @type {string} Current status message to display to user */
   let statusMessage = $state('');
 
-  // Filtering and grouping
+  // ============================================================================
+  // STATE: Filtering and Grouping
+  // ============================================================================
+  
+  /** @type {string} Request ID to filter messages by (partial match) */
   let filterRequestId = $state('');
+  
+  /** @type {boolean} Whether to group messages by request ID */
   let groupByRequestId = $state(false);
+  
+  /** @type {string} Custom field path to filter on (e.g., 'data.status') */
   let customFilterField = $state('');
+  
+  /** @type {string} Value to search for in custom field (case-insensitive) */
   let customFilterValue = $state('');
 
-  // Pagination state
+  // ============================================================================
+  // STATE: Pagination
+  // ============================================================================
+  
+  /** @type {number} Current page index (0-based) */
   let currentPage = $state(0);
+  
+  /** @type {number} Number of messages to display per page */
   let messagesPerPage = $state(50);
 
-  // Message counts (worker holds actual messages)
+  // ============================================================================
+  // STATE: Message Counts (Worker holds actual messages)
+  // ============================================================================
+  
+  /** @type {number} Total number of messages stored in worker */
   let totalMessageCount = $state(0);
+  
+  /** @type {number} Number of messages matching current filters */
   let filteredMessageCount = $state(0);
 
-  // Worker-based results (only slices, not full dataset)
+  // ============================================================================
+  // STATE: Worker-based results (only slices, not full dataset)
+  // ============================================================================
+  
+  /** @type {Array<Object>} Currently visible messages (one page worth) */
   let visibleMessages = $state([]);
+  
+  /** @type {Map<string, Array<Object>>|null} Messages grouped by request ID */
   let groupedMessages = $state(null);
+  
+  /** @type {Set<string>} Set of primitive (filterable) field paths */
   let primitiveFields = new Set();
+  
+  /** @type {Map<string, Set<string>>} Map of field paths to their unique values */
   let fieldValues = new Map();
+  
+  /** @type {Array<string>} All available field paths for autocomplete */
   let availableFields = $state([]);
   
+  // ============================================================================
+  // STATE: UI Expansion
+  // ============================================================================
+  
+  /** @type {Set<number>} Set of expanded message indices */
   let expandedMessages = $state(new Set());
+  
+  /** @type {Map<number, Set<string>>} Map of message index to expanded nested paths */
   let expandedNestedPaths = $state(new Map());
 
-  // Worker instance - single worker holds all data
+  // ============================================================================
+  // STATE: Web Worker
+  // ============================================================================
+  
+  /** @type {Worker|null} Storage worker that holds all message data */
   let storageWorker = null;
+  
+  /** @type {boolean} Whether a worker operation is in progress */
   let isProcessing = $state(false);
   
-  // Real-time capture buffer (component-level, not global)
+  // ============================================================================
+  // STATE: Real-time Capture
+  // ============================================================================
+  
+  /** @type {Array<Object>} Buffer for batching real-time messages */
   let capturedMessagesBuffer = [];
+  
+  /** @type {number|null} Timeout ID for batch sync */
   let syncTimeout = null;
 
-  // Initialize storage worker
+  // ============================================================================
+  // WORKER INITIALIZATION
+  // ============================================================================
+  
+  /**
+   * Initializes the message storage worker and sets up message handlers
+   * Creates a Web Worker that will store all messages and handle filtering/slicing.
+   * The worker isolates 12MB of message data from the main UI thread.
+   * 
+   * @returns {void}
+   */
   function initStorageWorker() {
     if (!storageWorker) {
       storageWorker = new Worker(new URL('./messageStorage.worker.js', import.meta.url), { type: 'module' });
@@ -135,7 +234,16 @@
     }
   }
 
-  // Request a slice of messages from the worker
+  // ============================================================================
+  // PAGINATION
+  // ============================================================================
+  
+  /**
+   * Requests a slice of messages from the worker for the current page
+   * Only transfers 50 messages at a time to minimize main thread memory usage.
+   * 
+   * @returns {void}
+   */
   function requestSlice() {
     if (!storageWorker) return;
     
@@ -148,7 +256,15 @@
     });
   }
 
-  // Trigger filtering when filter values change
+  // ============================================================================
+  // REACTIVE EFFECTS
+  // ============================================================================
+  
+  /**
+   * Reactively applies filters when filter values change
+   * Automatically triggered by Svelte 5's $effect when any filter state changes.
+   * Resets to first page and requests new filtered slice from worker.
+   */
   $effect(() => {
     if (storageWorker && totalMessageCount > 0) {
       isProcessing = true;
@@ -164,7 +280,10 @@
     }
   });
 
-  // Trigger grouping when needed
+  /**
+   * Reactively triggers message grouping by request ID when enabled
+   * Groups filtered messages for better visualization of request/response pairs.
+   */
   $effect(() => {
     if (groupByRequestId && storageWorker && filteredMessageCount > 0) {
       isProcessing = true;
@@ -178,14 +297,20 @@
     }
   });
 
-  // Request new slice when page changes
+  /**
+   * Requests new message slice when page changes
+   * Automatically triggered when currentPage, messagesPerPage, or filteredMessageCount changes.
+   */
   $effect(() => {
     if (storageWorker && filteredMessageCount > 0) {
       requestSlice();
     }
   });
 
-  // Cleanup worker on unmount
+  /**
+   * Cleanup effect - terminates worker on component unmount
+   * Ensures proper resource cleanup to prevent memory leaks.
+   */
   $effect(() => {
     return () => {
       if (storageWorker) {
@@ -195,18 +320,38 @@
     };
   });
 
+  // ============================================================================
+  // DERIVED STATE
+  // ============================================================================
+  
+  /** @type {boolean} Whether the current custom filter field is filterable (primitive type) */
   let fieldIsFilterable = $derived(primitiveFields.has(customFilterField));
+  
+  /** @type {Array<string>} Sorted array of unique values for the current filter field */
   let availableValues = $derived.by(() => {
     if (!fieldIsFilterable) return [];
     if (!fieldValues.has(customFilterField)) return [];
     return Array.from(fieldValues.get(customFilterField)).sort();
   });
 
+  /** @type {number} Total number of pages based on filtered message count */
   let totalPages = $derived(Math.ceil(filteredMessageCount / messagesPerPage));
 
+  /** @type {number} Start index for current page */
   let startIndex = $derived(currentPage * messagesPerPage);
 
-  // Russian pluralization constants
+  // ============================================================================
+  // LOCALIZATION (Russian)
+  // ============================================================================
+  
+  /**
+   * @typedef {Object} RussianPluralForms
+   * @property {string} one - Form for 1, 21, 31, etc.
+   * @property {string} few - Form for 2-4, 22-24, etc.
+   * @property {string} many - Form for 0, 5-20, 25-30, etc.
+   */
+  
+  /** @type {{messages: RussianPluralForms}} Russian pluralization constants */
   const RUSSIAN_PLURAL_FORMS = {
     messages: {
       one: 'сообщение',    // 1, 21, 31, ...
@@ -227,6 +372,11 @@
    * @param {string} few - Form for 2-4, 22-24, ... (e.g., "сообщения")
    * @param {string} many - Form for 0, 5-20, 25-30, ... (e.g., "сообщений")
    * @returns {string} The correct plural form
+   * @example
+   * pluralizeRussian(1, 'день', 'дня', 'дней')   // returns 'день'
+   * pluralizeRussian(2, 'день', 'дня', 'дней')   // returns 'дня'
+   * pluralizeRussian(5, 'день', 'дня', 'дней')   // returns 'дней'
+   * pluralizeRussian(21, 'день', 'дня', 'дней')  // returns 'день'
    */
   function pluralizeRussian(count, one, few, many) {
     const mod10 = count % 10;
@@ -241,7 +391,11 @@
     }
   }
 
-  // Helper function for message pluralization
+  /**
+   * Helper function for message pluralization
+   * @param {number} count - Number of messages
+   * @returns {string} Correctly pluralized message word in Russian
+   */
   function getMessageWord(count) {
     return pluralizeRussian(
       count,
@@ -251,7 +405,18 @@
     );
   }
 
-  // Toggle message expansion
+  // ============================================================================
+  // UI INTERACTION HELPERS
+  // ============================================================================
+  
+  /**
+   * Toggles message expansion state for detailed view
+   * When expanded, shows full message content including nested objects.
+   * When collapsed, clears nested path expansions for memory efficiency.
+   * 
+   * @param {number} index - Index of the message to toggle
+   * @returns {void}
+   */
   function toggleMessageExpansion(index) {
     if (expandedMessages.has(index)) {
       expandedMessages.delete(index);
@@ -268,7 +433,14 @@
     expandedNestedPaths = expandedNestedPaths;
   }
 
-  // Toggle nested path expansion within a message
+  /**
+   * Toggles expansion of a nested object path within a message
+   * Allows drilling down into nested data structures for inspection.
+   * 
+   * @param {number} messageIndex - Index of the containing message
+   * @param {string} path - Dot-notation path to the nested object (e.g., 'user.profile')
+   * @returns {void}
+   */
   function toggleNestedPath(messageIndex, path) {
     if (!expandedNestedPaths.has(messageIndex)) {
       expandedNestedPaths.set(messageIndex, new Set());
@@ -282,12 +454,25 @@
     expandedNestedPaths = expandedNestedPaths;
   }
 
-  // Check if nested path is expanded
+  /**
+   * Checks if a nested path is currently expanded
+   * @param {number} messageIndex - Index of the containing message
+   * @param {string} path - Dot-notation path to check
+   * @returns {boolean} True if the path is expanded
+   */
   function isNestedPathExpanded(messageIndex, path) {
     return expandedNestedPaths.get(messageIndex)?.has(path) || false;
   }
 
-  // Format value for display (handle different types)
+  // ============================================================================
+  // VALUE FORMATTING HELPERS
+  // ============================================================================
+  
+  /**
+   * Formats a value for display handling different types
+   * @param {*} value - Value to format
+   * @returns {string} Formatted string representation
+   */
   function formatValue(value) {
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
@@ -296,7 +481,11 @@
     return JSON.stringify(value, null, 2);
   }
 
-  // Get type of value for display
+  /**
+   * Gets the type of a value for display
+   * @param {*} value - Value to check
+   * @returns {string} Type string ('null', 'undefined', 'array', 'string', 'number', etc.)
+   */
   function getValueType(value) {
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
@@ -304,7 +493,13 @@
     return typeof value;
   }
 
-  // Get display preview for complex values
+  /**
+   * Gets a preview string for complex values (arrays, objects)
+   * Shows count information without expanding full structure.
+   * 
+   * @param {*} value - Value to preview
+   * @returns {string} Preview string (e.g., 'Array(5)', 'Object {3 properties}')
+   */
   function getValuePreview(value) {
     if (Array.isArray(value)) {
       return `Array(${value.length})`;
@@ -316,6 +511,17 @@
     return formatValue(value);
   }
 
+  // ============================================================================
+  // WEBSOCKET CONNECTION
+  // ============================================================================
+  
+  /**
+   * Establishes WebSocket connection and sets up message handlers
+   * Captures incoming messages if autoCapture is enabled, batching them
+   * for efficient worker sync (10 messages or 100ms intervals).
+   * 
+   * @returns {void}
+   */
   function connect() {
     try {
       ws = new WebSocket(wsUrl);
@@ -367,7 +573,14 @@
     }
   }
 
-  // Sync captured messages to worker
+  /**
+   * Syncs captured messages to worker in batches
+   * Called either when buffer reaches 10 messages or after 100ms timeout.
+   * Prevents blocking main thread during high-frequency message capture.
+   * 
+   * @param {boolean} wasOnLastPage - Whether user was viewing the last page
+   * @returns {void}
+   */
   function syncCapturedMessages(wasOnLastPage) {
     if (capturedMessagesBuffer.length === 0 || !storageWorker) return;
     
@@ -389,6 +602,12 @@
     // The worker will call appendMessages handler which updates totalMessageCount
   }
 
+  /**
+   * Disconnects WebSocket and cleans up resources
+   * Ensures any pending message syncs are cancelled.
+   * 
+   * @returns {void}
+   */
   function disconnect() {
     if (ws) {
       ws.close();
@@ -402,6 +621,16 @@
     }
   }
 
+  // ============================================================================
+  // MESSAGE MANAGEMENT
+  // ============================================================================
+  
+  /**
+   * Clears all captured messages from worker storage
+   * Resets pagination and filters to initial state.
+   * 
+   * @returns {void}
+   */
   function clearMessages() {
     if (!storageWorker) {
       initStorageWorker();
@@ -413,6 +642,12 @@
     statusMessage = 'Сообщения очищены';
   }
 
+  /**
+   * Exports all messages to a JSON file
+   * Requests all messages from worker and triggers browser download.
+   * 
+   * @returns {void}
+   */
   function exportMessages() {
     if (!storageWorker) return;
     
@@ -423,6 +658,14 @@
     });
   }
 
+  /**
+   * Handles file import for message history
+   * Uses jsonParser worker to parse large files without blocking UI.
+   * Then stores parsed messages in storage worker.
+   * 
+   * @param {Event} event - File input change event
+   * @returns {void}
+   */
   function handleImport(event) {
     const file = event.target.files[0];
     if (file) {
@@ -480,24 +723,45 @@
     }
   }
 
+  // ============================================================================
+  // PAGINATION CONTROLS
+  // ============================================================================
+  
+  /**
+   * Navigates to a specific page
+   * @param {number} page - Target page index (0-based)
+   * @returns {void}
+   */
   function goToPage(page) {
     if (page >= 0 && page < totalPages) {
       currentPage = page;
     }
   }
 
+  /**
+   * Navigates to the next page
+   * @returns {void}
+   */
   function nextPage() {
     if (currentPage < totalPages - 1) {
       currentPage++;
     }
   }
 
+  /**
+   * Navigates to the previous page
+   * @returns {void}
+   */
   function prevPage() {
     if (currentPage > 0) {
       currentPage--;
     }
   }
 
+  /**
+   * Navigates to the last page
+   * @returns {void}
+   */
   function goToLastPage() {
     currentPage = Math.max(0, totalPages - 1);
   }
