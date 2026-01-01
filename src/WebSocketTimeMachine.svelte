@@ -93,9 +93,10 @@
       initFilterWorker();
       isFiltering = true;
       
+      // Convert Svelte state to plain array to avoid DataCloneError
       filterWorker.postMessage({
         action: 'filter',
-        messages: messages,
+        messages: JSON.parse(JSON.stringify(messages)),
         filterRequestId: filterRequestId,
         customFilterField: customFilterField,
         customFilterValue: customFilterValue
@@ -111,9 +112,10 @@
       initFilterWorker();
       isFiltering = true;
       
+      // Convert Svelte state to plain array to avoid DataCloneError
       filterWorker.postMessage({
         action: 'group',
-        messages: filteredMessages
+        messages: JSON.parse(JSON.stringify(filteredMessages))
       });
     } else {
       groupedMessages = null;
@@ -125,9 +127,10 @@
     if (messages.length > 0) {
       initFilterWorker();
       
+      // Convert Svelte state to plain array to avoid DataCloneError
       filterWorker.postMessage({
         action: 'extractFields',
-        messages: messages
+        messages: JSON.parse(JSON.stringify(messages))
       });
     } else {
       availableFields = [];
