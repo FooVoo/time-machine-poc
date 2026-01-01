@@ -12,7 +12,6 @@
   let responseMap = new Map(); // Use Map for better performance
   
   const REPLAY_RESPONSE_DELAY_MS = 100; // Delay before simulating response
-  const MAX_VISIBLE_MESSAGES = 100; // Limit visible messages for performance
   
   // Pagination state
   let currentPage = 0;
@@ -42,12 +41,13 @@
             data: event.data
           };
           // Use push instead of spread operator for better performance
+          const wasOnLastPage = currentPage === totalPages - 1 || messages.length === 0;
           messages.push(message);
           messages = messages; // Trigger reactivity
           
-          // Auto-scroll to latest page if on last page
-          if (currentPage === totalPages - 2) {
-            currentPage = totalPages - 1;
+          // Auto-scroll to latest page if user was viewing the last page
+          if (wasOnLastPage) {
+            currentPage = Math.max(0, Math.ceil(messages.length / messagesPerPage) - 1);
           }
         }
       };

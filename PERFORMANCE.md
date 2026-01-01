@@ -127,12 +127,13 @@ Automatically moves to the last page when new messages arrive if you're viewing 
 
 ## Configuration
 
-You can adjust these constants in the code:
+You can adjust this constant in the code:
 
 ```javascript
-const MAX_VISIBLE_MESSAGES = 100; // Not currently used, reserved for future
 let messagesPerPage = 50; // Adjust based on message size and UI needs
 ```
+
+For very large individual messages, you may want to reduce this to 20-30. For small messages, you can increase to 100.
 
 ## Usage Tips
 
