@@ -1,6 +1,8 @@
 <svelte:options customElement="websocket-time-machine" />
 
 <script>
+  import { parseMessageData } from './messageUtils.js';
+  
   let wsUrl = $state('');
   let ws = null;
   let isConnected = $state(false);
@@ -185,15 +187,6 @@
       RUSSIAN_PLURAL_FORMS.messages.few,
       RUSSIAN_PLURAL_FORMS.messages.many
     );
-  }
-
-  // Parse message data once and cache it
-  function parseMessageData(msg) {
-    try {
-      return typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
-    } catch {
-      return null;
-    }
   }
 
   // Toggle message expansion

@@ -1,14 +1,7 @@
 // Web Worker for filtering messages
 // This offloads filtering operations from the main thread to prevent UI blocking
 
-// Helper function to parse message data
-function parseMessageData(msg) {
-  try {
-    return typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
-  } catch {
-    return null;
-  }
-}
+import { parseMessageData } from './messageUtils.js';
 
 // Helper function to get nested value from object
 function getNestedValue(obj, path) {
@@ -157,7 +150,7 @@ function getAllFieldPaths(messages) {
 
 // Handle messages from the main thread
 self.onmessage = function(e) {
-  const { action, messages, filterRequestId, customFilterField, customFilterValue, groupByRequestId } = e.data;
+  const { action, messages, filterRequestId, customFilterField, customFilterValue } = e.data;
   
   try {
     let result;
