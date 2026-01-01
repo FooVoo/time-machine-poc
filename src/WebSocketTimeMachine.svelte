@@ -47,12 +47,12 @@
   let groupedMessages = $derived.by(() => {
     if (!groupByRequestId) return null;
 
-    return groupMessagesByRequestId(filteredMessages());
+    return groupMessagesByRequestId(filteredMessages);
   })
 
-  let totalPages = $derived(Math.ceil(filteredMessages().length / messagesPerPage));
+  let totalPages = $derived(Math.ceil(filteredMessages.length / messagesPerPage));
 
-  let visibleMessages = $derived(filteredMessages().slice(
+  let visibleMessages = $derived(filteredMessages.slice(
             currentPage * messagesPerPage,
             (currentPage + 1) * messagesPerPage));
 
@@ -499,7 +499,7 @@
   </div>
 
   <div class="messages-panel">
-    <h2>Захваченные сообщения ({filteredMessages().length}{filterRequestId ? ` из ${messages.length}` : ''})</h2>
+    <h2>Захваченные сообщения ({filteredMessages.length}{filterRequestId ? ` из ${messages.length}` : ''})</h2>
 
     {#if groupByRequestId && groupedMessages}
       <!-- Grouped view by Request ID -->
@@ -557,14 +557,14 @@
       </div>
     {:else}
       <!-- Regular list view with pagination -->
-      {#if !groupByRequestId && filteredMessages().length > messagesPerPage}
+      {#if !groupByRequestId && filteredMessages.length > messagesPerPage}
         <div class="pagination-controls">
           <button class="btn btn-sm" onclick={prevPage} disabled={currentPage === 0}>
             Предыдущая
           </button>
           <span class="page-info">
             Страница {currentPage + 1} из {totalPages}
-            (показано {startIndex + 1}-{Math.min(startIndex + messagesPerPage, filteredMessages().length)} из {filteredMessages().length})
+            (показано {startIndex + 1}-{Math.min(startIndex + messagesPerPage, filteredMessages.length)} из {filteredMessages.length})
           </span>
           <button class="btn btn-sm" onclick={nextPage} disabled={currentPage === totalPages - 1}>
             Следующая
@@ -576,7 +576,7 @@
       {/if}
 
       <div class="messages-list">
-        {#each visibleMessages() as message, index}
+        {#each visibleMessages as message, index}
           {@const globalIndex = startIndex + index}
           {@const isExpanded = expandedMessages.has(globalIndex)}
           {@const parsedData = parseMessageData(message)}
