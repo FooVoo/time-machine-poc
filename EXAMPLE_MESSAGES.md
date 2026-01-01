@@ -325,7 +325,7 @@ Or manually create a JSON array following the format:
 
 ## Tips
 
-- **Large Files**: The component handles 5-10 MB files efficiently
+- **Large Files**: The component handles 10-20 MB files efficiently
 - **Filtering**: Combine requestId filter with custom field filter for precise results
 - **Grouping**: Best used with requestId filtering for focused analysis
 - **JSON Viewer**: Use expand/collapse to manage screen space
