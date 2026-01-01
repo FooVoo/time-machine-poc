@@ -9,6 +9,9 @@
   let replayMode = false;
   let statusMessage = '';
   let messageHistory = []; // Imported history for replay mode
+  let responseMap = {}; // Map for O(1) lookup of responses
+  
+  const REPLAY_RESPONSE_DELAY_MS = 100; // Delay before simulating response
 
   function connect() {
     try {
@@ -54,6 +57,7 @@
   function clearMessages() {
     messages = [];
     messageHistory = [];
+    responseMap = {};
     replayMode = false;
     statusMessage = 'Messages and history cleared';
   }
@@ -70,6 +74,23 @@
     statusMessage = 'Messages exported';
   }
 
+  function buildResponseMap(history) {
+    // Build a map for O(1) lookup: sent message -> received response
+    const map = {};
+    for (let i = 0; i < history.length; i++) {
+      if (history[i].type === 'sent') {
+        // Look for the next received message
+        for (let j = i + 1; j < history.length; j++) {
+          if (history[j].type === 'received') {
+            map[history[i].data] = history[j].data;
+            break;
+          }
+        }
+      }
+    }
+    return map;
+  }
+
   function handleImport(event) {
     const file = event.target.files[0];
     if (file) {
@@ -79,6 +100,7 @@
           const imported = JSON.parse(e.target.result);
           messageHistory = Array.isArray(imported) ? imported : [];
           messages = [...messageHistory];
+          responseMap = buildResponseMap(messageHistory);
           statusMessage = `Imported ${messageHistory.length} messages`;
         } catch (error) {
           statusMessage = 'Import failed: Invalid JSON';
@@ -88,54 +110,44 @@
     }
   }
 
-  function findMatchingResponse(sentData) {
-    // Find the sent message in history
-    for (let i = 0; i < messageHistory.length; i++) {
-      if (messageHistory[i].type === 'sent' && messageHistory[i].data === sentData) {
-        // Look for the next received message after this sent message
-        for (let j = i + 1; j < messageHistory.length; j++) {
-          if (messageHistory[j].type === 'received') {
-            return messageHistory[j].data;
-          }
-        }
+  function handleReplayMode(messageData) {
+    // Check if there's a matching response in the map
+    const matchingResponse = responseMap[messageData];
+    
+    if (matchingResponse) {
+      // Found a match - simulate the response locally
+      if (autoCapture) {
+        const sentMsg = {
+          timestamp: new Date().toISOString(),
+          type: 'sent',
+          data: messageData
+        };
+        messages = [...messages, sentMsg];
+        
+        // Simulate receiving the matching response after a short delay
+        setTimeout(() => {
+          const receivedMsg = {
+            timestamp: new Date().toISOString(),
+            type: 'received',
+            data: matchingResponse
+          };
+          messages = [...messages, receivedMsg];
+          statusMessage = 'Replayed from history';
+        }, REPLAY_RESPONSE_DELAY_MS);
       }
+      return true; // Message was intercepted
     }
-    return null;
+    
+    // No match found - will pass through
+    statusMessage = 'No match in history, passing through';
+    return false;
   }
 
   function sendMessage(messageData) {
     if (ws && isConnected) {
-      if (replayMode) {
-        // In replay mode, intercept and try to match against history
-        const matchingResponse = findMatchingResponse(messageData);
-        
-        if (matchingResponse) {
-          // Found a match - simulate the response locally
-          if (autoCapture) {
-            const sentMsg = {
-              timestamp: new Date().toISOString(),
-              type: 'sent',
-              data: messageData
-            };
-            messages = [...messages, sentMsg];
-            
-            // Simulate receiving the matching response after a short delay
-            setTimeout(() => {
-              const receivedMsg = {
-                timestamp: new Date().toISOString(),
-                type: 'received',
-                data: matchingResponse
-              };
-              messages = [...messages, receivedMsg];
-              statusMessage = 'Replayed from history';
-            }, 100);
-          }
-          // Don't send to actual WebSocket - intercepted
-          return;
-        } else {
-          // No match found - pass through to actual WebSocket
-          statusMessage = 'No match in history, passing through';
-        }
+      // In replay mode, try to intercept and match against history
+      if (replayMode && handleReplayMode(messageData)) {
+        return; // Message was intercepted and replayed
       }
       
       // Normal mode or pass-through: send to actual WebSocket
