@@ -94,9 +94,10 @@
       isFiltering = true;
       
       // Convert Svelte state to plain array to avoid DataCloneError
+      // Use structuredClone for better performance than JSON serialization
       filterWorker.postMessage({
         action: 'filter',
-        messages: JSON.parse(JSON.stringify(messages)),
+        messages: structuredClone(messages),
         filterRequestId: filterRequestId,
         customFilterField: customFilterField,
         customFilterValue: customFilterValue
@@ -113,9 +114,10 @@
       isFiltering = true;
       
       // Convert Svelte state to plain array to avoid DataCloneError
+      // Use structuredClone for better performance than JSON serialization
       filterWorker.postMessage({
         action: 'group',
-        messages: JSON.parse(JSON.stringify(filteredMessages))
+        messages: structuredClone(filteredMessages)
       });
     } else {
       groupedMessages = null;
@@ -128,9 +130,10 @@
       initFilterWorker();
       
       // Convert Svelte state to plain array to avoid DataCloneError
+      // Use structuredClone for better performance than JSON serialization
       filterWorker.postMessage({
         action: 'extractFields',
-        messages: JSON.parse(JSON.stringify(messages))
+        messages: structuredClone(messages)
       });
     } else {
       availableFields = [];
