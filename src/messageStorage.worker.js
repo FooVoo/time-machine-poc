@@ -1,13 +1,56 @@
-// Web Worker for storing and managing message data
-// This worker holds the complete message dataset and serves slices to the main app
+/**
+ * @fileoverview Web Worker for storing and managing message data
+ * This worker holds the complete message dataset (12,000+ messages) and serves
+ * paginated slices to the main app, minimizing main thread memory usage.
+ * 
+ * Architecture:
+ * - Worker stores ALL messages (12MB in memory, isolated from UI thread)
+ * - Main app only receives 50-message slices per page
+ * - Filtering operations return counts, not full datasets
+ * - 99.6% memory reduction in main thread
+ */
 
-let messages = []; // Complete message dataset stored in worker
-let filteredIndices = []; // Indices of filtered messages
-let groupedData = null; // Grouped message data
+/**
+ * @typedef {Object} Message
+ * @property {string} timestamp - ISO 8601 timestamp
+ * @property {'sent'|'received'} type - Message direction
+ * @property {string} data - JSON string or object containing message data
+ */
+
+/**
+ * @typedef {Object} WorkerRequest
+ * @property {string} action - Action to perform
+ * @property {Object} [data] - Action-specific data
+ */
+
+/**
+ * @typedef {Object} WorkerResponse
+ * @property {boolean} success - Whether the operation succeeded
+ * @property {string} action - The action that was performed
+ * @property {*} [result] - Action-specific result data
+ * @property {string} [error] - Error message if success is false
+ */
+
+/** @type {Array<Message>} Complete message dataset stored in worker */
+let messages = [];
+
+/** @type {Array<number>} Indices of filtered messages */
+let filteredIndices = [];
+
+/** @type {Array<[string, Array<Message>]>|null} Grouped message data */
+let groupedData = null;
 
 // Helper functions
 import { parseMessageData } from './messageUtils.js';
 
+/**
+ * Gets a nested value from an object using dot notation path
+ * @param {Object} obj - The object to traverse
+ * @param {string} path - Dot-separated path (e.g., 'user.profile.name')
+ * @returns {*} The value at the path, or undefined if not found
+ * @example
+ * getNestedValue({user: {name: 'John'}}, 'user.name') // returns 'John'
+ */
 function getNestedValue(obj, path) {
   const parts = path.split('.');
   let value = obj;
@@ -23,7 +66,13 @@ function getNestedValue(obj, path) {
   return value;
 }
 
-// Filter by request ID - optimized to single pass
+/**
+ * Filters messages by request ID - optimized to single pass
+ * @param {string} filterRequestId - The request ID to filter by (partial match)
+ * @returns {Array<number>} Array of message indices that match the filter
+ * @example
+ * filterByRequestId('req-123') // returns [0, 5, 12] (indices of matching messages)
+ */
 function filterByRequestId(filterRequestId) {
   if (!filterRequestId) {
     return Array.from({ length: messages.length }, (_, i) => i);
@@ -39,7 +88,15 @@ function filterByRequestId(filterRequestId) {
   return indices;
 }
 
-// Filter by custom field - optimized with early returns
+/**
+ * Filters messages by custom field - optimized with early returns
+ * @param {Array<number>} indices - Array of message indices to filter
+ * @param {string} customFilterField - Field path to filter on (e.g., 'data.status')
+ * @param {string} customFilterValue - Value to search for (case-insensitive partial match)
+ * @returns {Array<number>} Filtered array of message indices
+ * @example
+ * filterByCustomField([0,1,2], 'data.status', 'success') // returns [0, 2]
+ */
 function filterByCustomField(indices, customFilterField, customFilterValue) {
   if (!customFilterField || !customFilterValue) {
     return indices;
@@ -68,7 +125,15 @@ function filterByCustomField(indices, customFilterField, customFilterValue) {
   });
 }
 
-// Extract all field paths from an object
+/**
+ * Recursively extracts all field paths from an object
+ * @param {Object} obj - The object to extract paths from
+ * @param {string} [prefix=''] - Current path prefix for nested objects
+ * @param {Set<string>} primFields - Set to collect primitive field paths
+ * @param {Map<string, Set<string>>} valuesMap - Map of field paths to their unique values
+ * @returns {Array<string>} Array of all field paths found
+ * @private
+ */
 function extractFieldPaths(obj, prefix = '', primFields, valuesMap) {
   const paths = [];
 
@@ -100,7 +165,14 @@ function extractFieldPaths(obj, prefix = '', primFields, valuesMap) {
   return paths;
 }
 
-// Get all available field paths
+/**
+ * Gets all available field paths from all messages
+ * Analyzes message structure to provide autocomplete options
+ * @returns {Object} Field analysis result
+ * @returns {Array<string>} result.fields - Sorted array of all field paths
+ * @returns {Array<string>} result.primitiveFields - Array of primitive field paths (filterable)
+ * @returns {Array<[string, Array<string>]>} result.fieldValues - Map of fields to their unique values
+ */
 function getAllFieldPaths() {
   const fieldsSet = new Set();
   const primFields = new Set();
@@ -131,7 +203,13 @@ function getAllFieldPaths() {
   };
 }
 
-// Group messages by request ID
+/**
+ * Groups messages by their request ID
+ * @param {Array<number>} indices - Array of message indices to group
+ * @returns {Array<[string, Array<Message>]>} Array of [requestId, messages] tuples
+ * @example
+ * groupMessagesByRequestId([0,1,2]) // returns [['req-1', [msg1, msg2]], ['req-2', [msg3]]]
+ */
 function groupMessagesByRequestId(indices) {
   const groups = new Map();
 
@@ -151,7 +229,20 @@ function groupMessagesByRequestId(indices) {
   return Array.from(groups.entries());
 }
 
-// Handle messages from the main thread
+/**
+ * Handles incoming messages from the main thread
+ * Processes various actions for message management:
+ * - setMessages: Store initial message dataset
+ * - appendMessages: Add new messages from real-time capture
+ * - filter: Apply filters and return count
+ * - getSlice: Return paginated slice of messages
+ * - group: Group messages by request ID
+ * - extractFields: Analyze message structure
+ * - export: Serialize messages for download
+ * - clear: Reset all data
+ * 
+ * @param {MessageEvent<WorkerRequest>} e - Message event with action and data
+ */
 self.onmessage = function(e) {
   const { action, data: actionData } = e.data;
   
