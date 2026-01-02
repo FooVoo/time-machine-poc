@@ -246,6 +246,7 @@ function groupMessagesByRequestId(indices) {
   groupsArray.sort((a, b) => {
     const timeA = groupFirstTimestamp.get(a[0]);
     const timeB = groupFirstTimestamp.get(b[0]);
+    // Timestamps are ISO strings, direct comparison works correctly
     return timeA < timeB ? -1 : timeA > timeB ? 1 : 0;
   });
 

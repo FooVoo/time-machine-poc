@@ -27,6 +27,22 @@
   import { parseMessageData } from './messageUtils.js';
   
   // ============================================================================
+  // CONSTANTS
+  // ============================================================================
+  
+  /** @const {number} Maximum file size for import in bytes (100MB) */
+  const MAX_IMPORT_FILE_SIZE = 100 * 1024 * 1024;
+  
+  /** @const {number} Number of messages to validate during import */
+  const VALIDATION_SAMPLE_SIZE = 100;
+  
+  /** @const {number} Warning threshold for large imports */
+  const LARGE_IMPORT_WARNING_THRESHOLD = 50000;
+  
+  /** @const {number} Warning threshold for large exports */
+  const LARGE_EXPORT_WARNING_THRESHOLD = 50000;
+  
+  // ============================================================================
   // STATE: WebSocket Connection
   // ============================================================================
   
@@ -547,7 +563,7 @@
    * for efficient worker sync (10 messages or 100ms intervals).
    * 
    * GUARDRAILS:
-   * - Validates WebSocket URL format (ws:// or wss://)
+   * - Validates WebSocket URL format using URL constructor
    * - Prevents multiple connections to same URL
    * - 10-second connection timeout
    * - Validates connection state before operations
@@ -555,9 +571,15 @@
    * @returns {void}
    */
   function connect() {
-    // GUARDRAIL: Validate URL format
-    if (!wsUrl || (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://'))) {
-      statusMessage = 'Ошибка: URL должен начинаться с ws:// или wss://';
+    // GUARDRAIL: Validate URL format using URL constructor
+    try {
+      const url = new URL(wsUrl);
+      if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+        statusMessage = 'Ошибка: URL должен использовать протокол ws:// или wss://';
+        return;
+      }
+    } catch (error) {
+      statusMessage = 'Ошибка: Некорректный URL. Используйте ws://hostname:port или wss://hostname:port';
       return;
     }
     
@@ -779,7 +801,7 @@
     }
     
     // GUARDRAIL: Warn for very large exports
-    if (totalMessageCount > 50000) {
+    if (totalMessageCount > LARGE_EXPORT_WARNING_THRESHOLD) {
       const estimatedSizeMB = Math.round(totalMessageCount / 1000);
       const confirmed = confirm(
         `Экспорт ${totalMessageCount} ${getMessageWord(totalMessageCount)} ` +
@@ -825,8 +847,7 @@
     if (!file) return;
     
     // GUARDRAIL: File size limit (100MB)
-    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_IMPORT_FILE_SIZE) {
       const sizeMB = Math.round(file.size / (1024 * 1024));
       statusMessage = `Файл слишком большой (${sizeMB}MB). Максимум 100MB. Попробуйте фильтрацию перед экспортом.`;
       // Clear file input
@@ -849,6 +870,7 @@
     }
     
     const sizeMB = Math.round(file.size / (1024 * 1024) * 10) / 10;
+    const startTime = performance.now(); // Capture start time for accurate measurement
     statusMessage = `Импорт ${sizeMB}MB файла...`;
     
     const reader = new FileReader();
@@ -874,7 +896,7 @@
           
           // GUARDRAIL: Validate message structure
           const invalidMessages = [];
-          for (let i = 0; i < Math.min(data.length, 100); i++) {
+          for (let i = 0; i < Math.min(data.length, VALIDATION_SAMPLE_SIZE); i++) {
             const msg = data[i];
             if (!msg.timestamp || !msg.type || !msg.data) {
               invalidMessages.push({
@@ -904,7 +926,7 @@
           }
           
           // GUARDRAIL: Warn for very large imports
-          if (data.length > 50000) {
+          if (data.length > LARGE_IMPORT_WARNING_THRESHOLD) {
             const confirmed = confirm(
               `Импорт ${data.length} ${getMessageWord(data.length)}. ` +
               `Это может замедлить интерфейс. Продолжить?`
@@ -931,7 +953,7 @@
           });
           
           currentPage = 0;
-          const loadTime = Math.round(performance.now() / 100) / 10;
+          const loadTime = ((performance.now() - startTime) / 1000).toFixed(1); // Calculate actual load time
           statusMessage = `Импортировано ${data.length} ${getMessageWord(data.length)} за ${loadTime}с`;
         } else {
           // GUARDRAIL: Detailed error messages
@@ -1231,10 +1253,14 @@
                 {@const globalIndex = `group-${requestId}-${index}`}
                 {@const isExpanded = expandedMessages.has(globalIndex)}
                 {@const parsedData = parseMessageData(message)}
+                {@const responseNumber = message.type === 'received' 
+                  ? msgs.slice(0, index).filter(m => m.type === 'received').length + 1 
+                  : 0}
+                {@const messageLabel = message.type === 'sent' ? 'Запрос' : `Ответ ${responseNumber}`}
 
                 <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
                   <div class="message-header">
-                    <span class="message-type">{message.type === 'sent' ? 'Запрос' : `Ответ ${msgs.filter((m, i) => i < index && m.type === 'received').length + 1}`}</span>
+                    <span class="message-type">{messageLabel}</span>
                     <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
                     <button
                       class="expand-btn"
