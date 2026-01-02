@@ -140,8 +140,17 @@
   /** @type {Worker|null} Storage worker that holds all message data */
   let storageWorker = null;
   
+  /** @type {boolean} Whether worker is currently initializing */
+  let workerInitializing = false;
+  
+  /** @type {boolean} Whether worker is ready to receive messages */
+  let workerReady = $state(false);
+  
   /** @type {boolean} Whether a worker operation is in progress */
   let isProcessing = $state(false);
+  
+  /** @type {boolean} Whether component is shutting down */
+  let isTerminating = false;
   
   // ============================================================================
   // STATE: Real-time Capture
@@ -165,11 +174,23 @@
    * @returns {void}
    */
   function initStorageWorker() {
-    if (!storageWorker) {
-      storageWorker = new Worker(new URL('./messageStorage.worker.js', import.meta.url), { type: 'module' });
-      
-      storageWorker.onmessage = (event) => {
+    // Guard: Prevent multiple initializations
+    if (storageWorker || workerInitializing || isTerminating) {
+      return;
+    }
+    
+    workerInitializing = true;
+    storageWorker = new Worker(new URL('./messageStorage.worker.js', import.meta.url), { type: 'module' });
+    
+    storageWorker.onmessage = (event) => {
         const { success, action, slice, totalCount, filteredCount, grouped, fields, primitiveFields: primFields, fieldValues: fValues, messages: exportedMessages } = event.data;
+        
+        // Worker ready signal
+        if (action === 'init') {
+          workerReady = true;
+          workerInitializing = false;
+          return;
+        }
         
         if (success) {
           switch (action) {
@@ -177,8 +198,14 @@
               totalMessageCount = totalCount;
               filteredMessageCount = filteredCount;
               isProcessing = false;
-              // Request field extraction after setting messages
-              storageWorker.postMessage({ action: 'extractFields' });
+              
+              // Defer field extraction to avoid race condition
+              setTimeout(() => {
+                if (storageWorker && workerReady && !isTerminating) {
+                  storageWorker.postMessage({ action: 'extractFields' });
+                }
+              }, 0);
+              
               // Request first slice
               requestSlice();
               break;
@@ -253,7 +280,12 @@
       storageWorker.onerror = (error) => {
         console.error('Storage worker error:', error);
         isProcessing = false;
+        workerReady = false;
       };
+      
+      // Signal worker initialization complete
+      workerReady = true;
+      workerInitializing = false;
     }
   }
 
@@ -289,6 +321,7 @@
    * Resets to first page and requests new filtered slice from worker.
    * 
    * Note: Uses untrack to prevent infinite loops when worker updates counts
+   * Only triggers when there are actual filter criteria or messages exist
    */
   $effect(() => {
     // Track only the filter inputs, not the counts
@@ -297,17 +330,24 @@
     const value = customFilterValue;
     
     untrack(() => {
-      if (storageWorker && totalMessageCount > 0) {
-        isProcessing = true;
-        
-        storageWorker.postMessage({
-          action: 'filter',
-          data: {
-            filterRequestId: reqId,
-            customFilterField: field,
-            customFilterValue: value
-          }
-        });
+      // Only filter when there's actual criteria OR messages exist
+      const hasFilter = reqId || (field && value);
+      const hasMessages = totalMessageCount > 0;
+      
+      if (storageWorker && workerReady && !isTerminating && (hasMessages || hasFilter)) {
+        // Prevent overlapping filter operations
+        if (!isProcessing) {
+          isProcessing = true;
+          
+          storageWorker.postMessage({
+            action: 'filter',
+            data: {
+              filterRequestId: reqId,
+              customFilterField: field,
+              customFilterValue: value
+            }
+          });
+        }
       }
     });
   });
@@ -320,16 +360,19 @@
    */
   $effect(() => {
     const shouldGroup = groupByRequestId;
-    const hasMessages = filteredMessageCount > 0;
     
     untrack(() => {
-      if (shouldGroup && storageWorker && hasMessages) {
-        isProcessing = true;
-        
-        storageWorker.postMessage({
-          action: 'group',
-          data: {}
-        });
+      const hasMessages = filteredMessageCount > 0;
+      
+      if (shouldGroup && storageWorker && workerReady && !isTerminating && hasMessages) {
+        if (!isProcessing) {
+          isProcessing = true;
+          
+          storageWorker.postMessage({
+            action: 'group',
+            data: {}
+          });
+        }
       } else {
         groupedMessages = null;
       }
@@ -341,6 +384,7 @@
    * Automatically triggered when currentPage or messagesPerPage changes.
    * 
    * Note: Uses untrack to prevent infinite loops from filteredMessageCount updates
+   * Validates page boundaries to prevent requesting invalid ranges
    */
   $effect(() => {
     // Track only the page navigation, not the message counts
@@ -348,8 +392,18 @@
     const perPage = messagesPerPage;
     
     untrack(() => {
-      if (storageWorker && filteredMessageCount > 0) {
-        requestSlice();
+      const total = totalMessageCount;
+      const filtered = filteredMessageCount;
+      const pages = Math.ceil(filtered / perPage);
+      
+      if (storageWorker && workerReady && !isTerminating && !isProcessing && filtered > 0) {
+        // Validate page boundaries
+        if (page < pages || pages === 0) {
+          requestSlice();
+        } else if (page >= pages && pages > 0) {
+          // Reset to last valid page
+          currentPage = pages - 1;
+        }
       }
     });
   });
@@ -357,12 +411,29 @@
   /**
    * Cleanup effect - terminates worker on component unmount
    * Ensures proper resource cleanup to prevent memory leaks.
+   * Cancels all pending operations before termination.
    */
   $effect(() => {
     return () => {
-      if (storageWorker) {
+      if (storageWorker && !isTerminating) {
+        isTerminating = true;
+        
+        // Cancel pending operations
+        if (syncTimeout) {
+          clearTimeout(syncTimeout);
+          syncTimeout = null;
+        }
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout);
+          connectionTimeout = null;
+        }
+        
+        // Terminate worker
         storageWorker.terminate();
         storageWorker = null;
+        workerReady = false;
+        workerInitializing = false;
+        isTerminating = false;
       }
     };
   });
@@ -634,8 +705,8 @@
           return; // Silently ignore if not capturing
         }
         
-        if (!storageWorker) {
-          console.warn('Storage worker not initialized. Message not captured.');
+        if (!storageWorker || !workerReady) {
+          console.warn('Storage worker not ready. Message not captured.');
           return;
         }
         
@@ -645,18 +716,15 @@
           data: event.data
         };
         
-        // Track if user is on last page for auto-scroll
-        const wasOnLastPage = currentPage === totalPages - 1 || totalMessageCount === 0;
-        
         // Buffer messages for batch sync with worker
         capturedMessagesBuffer.push(message);
         
         // Sync with worker every 10 messages or after 100ms delay
         if (capturedMessagesBuffer.length >= 10) {
-          syncCapturedMessages(wasOnLastPage);
+          syncCapturedMessages();
         } else if (!syncTimeout) {
           syncTimeout = setTimeout(() => {
-            syncCapturedMessages(wasOnLastPage);
+            syncCapturedMessages();
           }, 100);
         }
       };
@@ -682,7 +750,7 @@
         statusMessage = 'Отключено';
         // Sync any remaining buffered messages
         if (capturedMessagesBuffer.length > 0) {
-          syncCapturedMessages(false);
+          syncCapturedMessages();
         }
       };
     } catch (error) {
@@ -700,11 +768,10 @@
    * Called either when buffer reaches 10 messages or after 100ms timeout.
    * Prevents blocking main thread during high-frequency message capture.
    * 
-   * @param {boolean} wasOnLastPage - Whether user was viewing the last page
    * @returns {void}
    */
-  function syncCapturedMessages(wasOnLastPage) {
-    if (capturedMessagesBuffer.length === 0 || !storageWorker) return;
+  function syncCapturedMessages() {
+    if (capturedMessagesBuffer.length === 0 || !storageWorker || !workerReady) return;
     
     const messagesToSync = [...capturedMessagesBuffer];
     capturedMessagesBuffer = [];
@@ -719,9 +786,6 @@
       action: 'appendMessages',
       data: { messages: messagesToSync }
     });
-    
-    // Note: Don't calculate page here - wait for worker response with updated count
-    // The worker will call appendMessages handler which updates totalMessageCount
   }
 
   /**
