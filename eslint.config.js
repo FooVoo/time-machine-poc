@@ -50,7 +50,6 @@ export default [
       'no-eval': 'error',
       'no-implied-eval': 'error',
       'no-new-func': 'error',
-      'no-return-await': 'error',
       'require-await': 'error',
       'no-await-in-loop': 'warn',
       'array-callback-return': 'error',
@@ -107,7 +106,7 @@ export default [
       'prefer-const': 'off',
       'no-unused-vars': ['error', {
         argsIgnorePattern: '^_',
-        varsIgnorePattern: '^(_|\\$)',
+        varsIgnorePattern: '^[_$]',
       }],
     },
   },
