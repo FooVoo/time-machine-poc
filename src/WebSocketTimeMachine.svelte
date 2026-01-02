@@ -24,6 +24,7 @@
 <svelte:options customElement="websocket-time-machine" />
 
 <script>
+  import { untrack } from 'svelte';
   import { parseMessageData } from './messageUtils.js';
   
   // ============================================================================
@@ -286,47 +287,71 @@
    * Reactively applies filters when filter values change
    * Automatically triggered by Svelte 5's $effect when any filter state changes.
    * Resets to first page and requests new filtered slice from worker.
+   * 
+   * Note: Uses untrack to prevent infinite loops when worker updates counts
    */
   $effect(() => {
-    if (storageWorker && totalMessageCount > 0) {
-      isProcessing = true;
-      
-      storageWorker.postMessage({
-        action: 'filter',
-        data: {
-          filterRequestId: filterRequestId,
-          customFilterField: customFilterField,
-          customFilterValue: customFilterValue
-        }
-      });
-    }
+    // Track only the filter inputs, not the counts
+    const reqId = filterRequestId;
+    const field = customFilterField;
+    const value = customFilterValue;
+    
+    untrack(() => {
+      if (storageWorker && totalMessageCount > 0) {
+        isProcessing = true;
+        
+        storageWorker.postMessage({
+          action: 'filter',
+          data: {
+            filterRequestId: reqId,
+            customFilterField: field,
+            customFilterValue: value
+          }
+        });
+      }
+    });
   });
 
   /**
    * Reactively triggers message grouping by request ID when enabled
    * Groups filtered messages for better visualization of request/response pairs.
+   * 
+   * Note: Uses untrack to prevent infinite loops when worker updates
    */
   $effect(() => {
-    if (groupByRequestId && storageWorker && filteredMessageCount > 0) {
-      isProcessing = true;
-      
-      storageWorker.postMessage({
-        action: 'group',
-        data: {}
-      });
-    } else {
-      groupedMessages = null;
-    }
+    const shouldGroup = groupByRequestId;
+    const hasMessages = filteredMessageCount > 0;
+    
+    untrack(() => {
+      if (shouldGroup && storageWorker && hasMessages) {
+        isProcessing = true;
+        
+        storageWorker.postMessage({
+          action: 'group',
+          data: {}
+        });
+      } else {
+        groupedMessages = null;
+      }
+    });
   });
 
   /**
    * Requests new message slice when page changes
-   * Automatically triggered when currentPage, messagesPerPage, or filteredMessageCount changes.
+   * Automatically triggered when currentPage or messagesPerPage changes.
+   * 
+   * Note: Uses untrack to prevent infinite loops from filteredMessageCount updates
    */
   $effect(() => {
-    if (storageWorker && filteredMessageCount > 0) {
-      requestSlice();
-    }
+    // Track only the page navigation, not the message counts
+    const page = currentPage;
+    const perPage = messagesPerPage;
+    
+    untrack(() => {
+      if (storageWorker && filteredMessageCount > 0) {
+        requestSlice();
+      }
+    });
   });
 
   /**
