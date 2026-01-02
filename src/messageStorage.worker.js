@@ -205,26 +205,13 @@ function getAllFieldPaths() {
 
 /**
  * Groups messages by their request ID
- * Supports 1:N request-response relationships (one request → multiple responses)
- * Messages are kept in chronological order within each group.
- * 
  * @param {Array<number>} indices - Array of message indices to group
- * @returns {Array<[string, Array<Message>]>} Array of [requestId, messages] tuples sorted by first message timestamp
+ * @returns {Array<[string, Array<Message>]>} Array of [requestId, messages] tuples
  * @example
- * // One request with multiple responses
- * groupMessagesByRequestId([0,1,2,3]) 
- * // returns [
- * //   ['req-1', [
- * //     {type: 'sent', data: '{requestId: "req-1"}'},
- * //     {type: 'received', data: '{requestId: "req-1", status: "processing"}'},
- * //     {type: 'received', data: '{requestId: "req-1", progress: 50}'},
- * //     {type: 'received', data: '{requestId: "req-1", status: "complete"}'}
- * //   ]]
- * // ]
+ * groupMessagesByRequestId([0,1,2]) // returns [['req-1', [msg1, msg2]], ['req-2', [msg3]]]
  */
 function groupMessagesByRequestId(indices) {
   const groups = new Map();
-  const groupFirstTimestamp = new Map(); // Track first message timestamp for sorting
 
   for (const index of indices) {
     const msg = messages[index];
@@ -234,23 +221,12 @@ function groupMessagesByRequestId(indices) {
     if (requestId) {
       if (!groups.has(requestId)) {
         groups.set(requestId, []);
-        groupFirstTimestamp.set(requestId, msg.timestamp);
       }
-      // Add message to group (maintains chronological order since indices are sequential)
       groups.get(requestId).push(msg);
     }
   }
 
-  // Convert to array and sort by first message timestamp for consistent display
-  const groupsArray = Array.from(groups.entries());
-  groupsArray.sort((a, b) => {
-    const timeA = groupFirstTimestamp.get(a[0]);
-    const timeB = groupFirstTimestamp.get(b[0]);
-    // Timestamps are ISO strings, direct comparison works correctly
-    return timeA < timeB ? -1 : timeA > timeB ? 1 : 0;
-  });
-
-  return groupsArray;
+  return Array.from(groups.entries());
 }
 
 /**

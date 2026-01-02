@@ -27,20 +27,23 @@
   import { parseMessageData } from './messageUtils.js';
   
   // ============================================================================
-  // CONSTANTS
+  // CONFIGURATION CONSTANTS
   // ============================================================================
   
-  /** @const {number} Maximum file size for import in bytes (100MB) */
+  /** @const {number} Maximum import file size in bytes (100MB) */
   const MAX_IMPORT_FILE_SIZE = 100 * 1024 * 1024;
   
   /** @const {number} Number of messages to validate during import */
   const VALIDATION_SAMPLE_SIZE = 100;
   
-  /** @const {number} Warning threshold for large imports */
+  /** @const {number} Threshold for large import warning */
   const LARGE_IMPORT_WARNING_THRESHOLD = 50000;
   
-  /** @const {number} Warning threshold for large exports */
+  /** @const {number} Threshold for large export warning */
   const LARGE_EXPORT_WARNING_THRESHOLD = 50000;
+  
+  /** @const {number} WebSocket connection timeout in milliseconds */
+  const CONNECTION_TIMEOUT_MS = 10000;
   
   // ============================================================================
   // STATE: WebSocket Connection
@@ -433,67 +436,44 @@
    * When expanded, shows full message content including nested objects.
    * When collapsed, clears nested path expansions for memory efficiency.
    * 
-   * Uses Svelte 5 reactivity by creating new Set instances for state updates.
-   * 
-   * @param {number|string} index - Index of the message to toggle (can be number or string for grouped messages)
+   * @param {number} index - Index of the message to toggle
    * @returns {void}
    */
   function toggleMessageExpansion(index) {
     if (expandedMessages.has(index)) {
-      // Create new Set without the index to trigger Svelte 5 reactivity
-      const newExpanded = new Set(expandedMessages);
-      newExpanded.delete(index);
-      expandedMessages = newExpanded;
-      
-      // Create new Map without this message's nested paths
-      const newNestedPaths = new Map(expandedNestedPaths);
-      newNestedPaths.delete(index);
-      expandedNestedPaths = newNestedPaths;
+      expandedMessages.delete(index);
+      // Clear nested expansions for this message
+      expandedNestedPaths.delete(index);
     } else {
-      // Create new Set with the index to trigger Svelte 5 reactivity
-      const newExpanded = new Set(expandedMessages);
-      newExpanded.add(index);
-      expandedMessages = newExpanded;
-      
+      expandedMessages.add(index);
       // Initialize nested paths map for this message
       if (!expandedNestedPaths.has(index)) {
-        const newNestedPaths = new Map(expandedNestedPaths);
-        newNestedPaths.set(index, new Set());
-        expandedNestedPaths = newNestedPaths;
+        expandedNestedPaths.set(index, new Set());
       }
     }
+    expandedMessages = expandedMessages;
+    expandedNestedPaths = expandedNestedPaths;
   }
 
   /**
    * Toggles expansion of a nested object path within a message
    * Allows drilling down into nested data structures for inspection.
    * 
-   * Uses Svelte 5 reactivity by creating new Map and Set instances.
-   * 
-   * @param {number|string} messageIndex - Index of the containing message
+   * @param {number} messageIndex - Index of the containing message
    * @param {string} path - Dot-notation path to the nested object (e.g., 'user.profile')
    * @returns {void}
    */
   function toggleNestedPath(messageIndex, path) {
     if (!expandedNestedPaths.has(messageIndex)) {
-      const newNestedPaths = new Map(expandedNestedPaths);
-      newNestedPaths.set(messageIndex, new Set());
-      expandedNestedPaths = newNestedPaths;
+      expandedNestedPaths.set(messageIndex, new Set());
     }
-    
     const paths = expandedNestedPaths.get(messageIndex);
-    const newPaths = new Set(paths);
-    
-    if (newPaths.has(path)) {
-      newPaths.delete(path);
+    if (paths.has(path)) {
+      paths.delete(path);
     } else {
-      newPaths.add(path);
+      paths.add(path);
     }
-    
-    // Create new Map with updated Set to trigger Svelte 5 reactivity
-    const newNestedPaths = new Map(expandedNestedPaths);
-    newNestedPaths.set(messageIndex, newPaths);
-    expandedNestedPaths = newNestedPaths;
+    expandedNestedPaths = expandedNestedPaths;
   }
 
   /**
@@ -563,7 +543,7 @@
    * for efficient worker sync (10 messages or 100ms intervals).
    * 
    * GUARDRAILS:
-   * - Validates WebSocket URL format using URL constructor
+   * - Validates WebSocket URL format (ws:// or wss://)
    * - Prevents multiple connections to same URL
    * - 10-second connection timeout
    * - Validates connection state before operations
@@ -571,15 +551,20 @@
    * @returns {void}
    */
   function connect() {
-    // GUARDRAIL: Validate URL format using URL constructor
+    // GUARDRAIL: Validate URL format
+    if (!wsUrl) {
+      statusMessage = 'Ошибка: Введите URL WebSocket';
+      return;
+    }
+    
     try {
       const url = new URL(wsUrl);
       if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
-        statusMessage = 'Ошибка: URL должен использовать протокол ws:// или wss://';
+        statusMessage = 'Ошибка: URL должен начинаться с ws:// или wss://';
         return;
       }
     } catch (error) {
-      statusMessage = 'Ошибка: Некорректный URL. Используйте ws://hostname:port или wss://hostname:port';
+      statusMessage = 'Ошибка: Неверный формат URL';
       return;
     }
     
@@ -600,7 +585,7 @@
           ws = null;
           statusMessage = 'Таймаут подключения (10с). Проверьте URL и сеть.';
         }
-      }, 10000);
+      }, CONNECTION_TIMEOUT_MS);
 
       ws.onopen = () => {
         // Clear timeout on successful connection
@@ -652,18 +637,16 @@
       };
 
       ws.onerror = (error) => {
-        // Clear connection timeout
+        // Clear timeout on error
         if (connectionTimeout) {
           clearTimeout(connectionTimeout);
           connectionTimeout = null;
         }
-        
-        statusMessage = 'Ошибка WebSocket соединения. Проверьте URL и сеть.';
-        isConnected = false;
+        statusMessage = 'Ошибка WebSocket соединения';
       };
 
       ws.onclose = () => {
-        // Clear connection timeout
+        // Clear timeout on close
         if (connectionTimeout) {
           clearTimeout(connectionTimeout);
           connectionTimeout = null;
@@ -671,21 +654,18 @@
         
         isConnected = false;
         statusMessage = 'Отключено';
-        
         // Sync any remaining buffered messages
         if (capturedMessagesBuffer.length > 0) {
           syncCapturedMessages(false);
         }
       };
     } catch (error) {
-      // Clear connection timeout on error
+      // Clear timeout on exception
       if (connectionTimeout) {
         clearTimeout(connectionTimeout);
         connectionTimeout = null;
       }
-      
       statusMessage = 'Ошибка подключения: ' + error.message;
-      isConnected = false;
     }
   }
 
@@ -730,17 +710,15 @@
       ws = null;
       isConnected = false;
     }
-    
-    // Clean up connection timeout
-    if (connectionTimeout) {
-      clearTimeout(connectionTimeout);
-      connectionTimeout = null;
-    }
-    
     // Clean up any pending sync
     if (syncTimeout) {
       clearTimeout(syncTimeout);
       syncTimeout = null;
+    }
+    // Clean up connection timeout
+    if (connectionTimeout) {
+      clearTimeout(connectionTimeout);
+      connectionTimeout = null;
     }
   }
 
@@ -752,20 +730,21 @@
    * Clears all captured messages from worker storage
    * Resets pagination and filters to initial state.
    * 
-   * GUARDRAIL: Asks for confirmation before deleting messages
+   * @returns {void}
+   */
+  /**
+   * Clears all messages from storage
+   * Shows confirmation dialog before destructive action.
+   * 
+   * GUARDRAIL: Requires user confirmation with message count
    * 
    * @returns {void}
    */
   function clearMessages() {
     // GUARDRAIL: Confirm before destructive action
     if (totalMessageCount > 0) {
-      const confirmed = confirm(
-        `Удалить все ${totalMessageCount} ${getMessageWord(totalMessageCount)}? ` +
-        `Это действие нельзя отменить.`
-      );
-      
+      const confirmed = confirm(`Удалить все ${totalMessageCount} ${getMessageWord(totalMessageCount)}? Это действие нельзя отменить.`);
       if (!confirmed) {
-        statusMessage = 'Очистка отменена';
         return;
       }
     }
@@ -777,9 +756,6 @@
     storageWorker.postMessage({ action: 'clear' });
     currentPage = 0;
     filterRequestId = '';
-    customFilterField = '';
-    customFilterValue = '';
-    groupByRequestId = false;
     statusMessage = 'Сообщения очищены';
   }
 
@@ -788,37 +764,26 @@
    * Requests all messages from worker and triggers browser download.
    * 
    * GUARDRAILS:
-   * - Warns if exporting > 50,000 messages
-   * - Estimates export file size
-   * - Shows progress for large exports
+   * - Warns for large exports (>50K messages)
+   * - Shows size estimation
+   * - Requires confirmation for large datasets
    * 
    * @returns {void}
    */
   function exportMessages() {
-    if (!storageWorker) {
-      statusMessage = 'Нет данных для экспорта';
-      return;
-    }
+    if (!storageWorker) return;
     
-    // GUARDRAIL: Warn for very large exports
+    // GUARDRAIL: Warn for large exports
     if (totalMessageCount > LARGE_EXPORT_WARNING_THRESHOLD) {
-      const estimatedSizeMB = Math.round(totalMessageCount / 1000);
+      const estimatedSizeMB = Math.round(totalMessageCount / 1000); // ~1KB per message
       const confirmed = confirm(
-        `Экспорт ${totalMessageCount} ${getMessageWord(totalMessageCount)} ` +
-        `(~${estimatedSizeMB}MB). Это может занять время. ` +
-        `Рассмотрите фильтрацию данных. Продолжить?`
+        `Экспортировать ${totalMessageCount} ${getMessageWord(totalMessageCount)} (~${estimatedSizeMB}MB)? ` +
+        `Это может занять время. Рассмотрите фильтрацию для уменьшения размера. Продолжить?`
       );
-      
       if (!confirmed) {
-        statusMessage = 'Экспорт отменен';
         return;
       }
     }
-    
-    // Show progress
-    statusMessage = totalMessageCount > 1000 
-      ? `Экспорт ${totalMessageCount} ${getMessageWord(totalMessageCount)}...`
-      : 'Экспорт...';
     
     isProcessing = true;
     storageWorker.postMessage({
@@ -833,11 +798,11 @@
    * Then stores parsed messages in storage worker.
    * 
    * GUARDRAILS:
-   * - Max file size: 100MB
-   * - Validates JSON structure
-   * - Validates required fields (timestamp, type, data)
-   * - Warns if overwriting existing messages
-   * - Shows detailed error messages
+   * - Maximum file size: 100MB
+   * - Validates JSON structure and required fields
+   * - Warns if overwriting existing data
+   * - Warns for very large imports (>50K messages)
+   * - Validates first N messages for corruption detection
    * 
    * @param {Event} event - File input change event
    * @returns {void}
@@ -846,12 +811,12 @@
     const file = event.target.files[0];
     if (!file) return;
     
-    // GUARDRAIL: File size limit (100MB)
+    // GUARDRAIL: File size limit
     if (file.size > MAX_IMPORT_FILE_SIZE) {
-      const sizeMB = Math.round(file.size / (1024 * 1024));
-      statusMessage = `Файл слишком большой (${sizeMB}MB). Максимум 100MB. Попробуйте фильтрацию перед экспортом.`;
-      // Clear file input
-      event.target.value = '';
+      const fileSizeMB = Math.round(file.size / (1024 * 1024));
+      const maxSizeMB = Math.round(MAX_IMPORT_FILE_SIZE / (1024 * 1024));
+      statusMessage = `Ошибка: Файл слишком большой (${fileSizeMB}MB). Максимум ${maxSizeMB}MB. Попробуйте фильтрацию перед экспортом.`;
+      event.target.value = ''; // Reset file input
       return;
     }
     
@@ -859,21 +824,18 @@
     if (totalMessageCount > 0) {
       const confirmed = confirm(
         `Импорт заменит существующие ${totalMessageCount} ${getMessageWord(totalMessageCount)}. ` +
-        `Экспортируйте их сначала, если нужно сохранить. Продолжить?`
+        `Экспортируйте их сначала при необходимости. Продолжить?`
       );
-      
       if (!confirmed) {
-        statusMessage = 'Импорт отменен';
-        event.target.value = '';
+        event.target.value = ''; // Reset file input
         return;
       }
     }
     
-    const sizeMB = Math.round(file.size / (1024 * 1024) * 10) / 10;
-    const startTime = performance.now(); // Capture start time for accurate measurement
-    statusMessage = `Импорт ${sizeMB}MB файла...`;
-    
+    statusMessage = 'Импорт...';
+    const startTime = performance.now();
     const reader = new FileReader();
+    
     reader.onload = (e) => {
       const fileContent = typeof e.target.result === 'string' 
         ? e.target.result 
@@ -883,57 +845,54 @@
       const worker = new Worker(new URL('./jsonParser.worker.js', import.meta.url), { type: 'module' });
       
       // Handle messages from the worker
-      worker.onmessage = (event) => {
-        const { success, data, error } = event.data;
+      worker.onmessage = (workerEvent) => {
+        const { success, data, error } = workerEvent.data;
         
         if (success) {
-          // GUARDRAIL: Validate data structure
+          // GUARDRAIL: Validate structure
           if (!Array.isArray(data)) {
             statusMessage = 'Ошибка импорта: Файл должен содержать массив сообщений';
+            event.target.value = '';
             worker.terminate();
             return;
           }
           
-          // GUARDRAIL: Validate message structure
-          const invalidMessages = [];
-          for (let i = 0; i < Math.min(data.length, VALIDATION_SAMPLE_SIZE); i++) {
+          // GUARDRAIL: Validate message structure (first 100 messages)
+          const samplesToValidate = Math.min(data.length, VALIDATION_SAMPLE_SIZE);
+          for (let i = 0; i < samplesToValidate; i++) {
             const msg = data[i];
-            if (!msg.timestamp || !msg.type || !msg.data) {
-              invalidMessages.push({
-                index: i,
-                missing: [
-                  !msg.timestamp && 'timestamp',
-                  !msg.type && 'type',
-                  !msg.data && 'data'
-                ].filter(Boolean)
-              });
-            } else if (msg.type !== 'sent' && msg.type !== 'received') {
-              invalidMessages.push({
-                index: i,
-                error: `type должен быть 'sent' или 'received', получено '${msg.type}'`
-              });
+            if (!msg || typeof msg !== 'object') {
+              statusMessage = `Ошибка: Сообщение ${i}: не является объектом`;
+              event.target.value = '';
+              worker.terminate();
+              return;
             }
-          }
-          
-          if (invalidMessages.length > 0) {
-            const firstError = invalidMessages[0];
-            const errorMsg = firstError.missing 
-              ? `отсутствуют поля: ${firstError.missing.join(', ')}`
-              : firstError.error;
-            statusMessage = `Ошибка импорта: Сообщение ${firstError.index}: ${errorMsg}`;
-            worker.terminate();
-            return;
+            if (!msg.timestamp || !msg.type || !msg.data) {
+              const missing = [];
+              if (!msg.timestamp) missing.push('timestamp');
+              if (!msg.type) missing.push('type');
+              if (!msg.data) missing.push('data');
+              statusMessage = `Ошибка: Сообщение ${i}: отсутствуют поля: ${missing.join(', ')}`;
+              event.target.value = '';
+              worker.terminate();
+              return;
+            }
+            if (msg.type !== 'sent' && msg.type !== 'received') {
+              statusMessage = `Ошибка: Сообщение ${i}: type должен быть 'sent' или 'received'`;
+              event.target.value = '';
+              worker.terminate();
+              return;
+            }
           }
           
           // GUARDRAIL: Warn for very large imports
           if (data.length > LARGE_IMPORT_WARNING_THRESHOLD) {
             const confirmed = confirm(
-              `Импорт ${data.length} ${getMessageWord(data.length)}. ` +
+              `Импортировать ${data.length} ${getMessageWord(data.length)}? ` +
               `Это может замедлить интерфейс. Продолжить?`
             );
-            
             if (!confirmed) {
-              statusMessage = 'Импорт отменен';
+              event.target.value = '';
               worker.terminate();
               return;
             }
@@ -945,7 +904,6 @@
           }
           
           // Send parsed messages to storage worker
-          statusMessage = `Загрузка ${data.length} ${getMessageWord(data.length)}...`;
           isProcessing = true;
           storageWorker.postMessage({
             action: 'setMessages',
@@ -953,25 +911,21 @@
           });
           
           currentPage = 0;
-          const loadTime = ((performance.now() - startTime) / 1000).toFixed(1); // Calculate actual load time
+          const loadTime = ((performance.now() - startTime) / 1000).toFixed(1);
           statusMessage = `Импортировано ${data.length} ${getMessageWord(data.length)} за ${loadTime}с`;
         } else {
-          // GUARDRAIL: Detailed error messages
-          const errorDetails = error.includes('JSON') 
-            ? 'Файл содержит некорректный JSON. Проверьте формат.'
-            : error.includes('truncated')
-            ? 'Файл поврежден или обрезан. Экспортируйте заново.'
-            : error;
-          statusMessage = `Ошибка импорта: ${errorDetails}`;
+          statusMessage = `Ошибка импорта: ${error || 'Некорректный JSON'}`;
         }
         
-        // Terminate the worker after use
+        // Reset file input and terminate worker
+        event.target.value = '';
         worker.terminate();
       };
       
       // Handle worker errors
       worker.onerror = (error) => {
-        statusMessage = 'Ошибка импорта: Не удалось разобрать JSON. Проверьте формат файла.';
+        statusMessage = 'Ошибка импорта: Некорректный JSON';
+        event.target.value = '';
         worker.terminate();
       };
       
@@ -980,13 +934,11 @@
     };
     
     reader.onerror = () => {
-      statusMessage = 'Ошибка чтения файла. Попробуйте снова.';
+      statusMessage = 'Ошибка чтения файла';
+      event.target.value = '';
     };
     
     reader.readAsText(file);
-    
-    // Clear file input for re-import
-    event.target.value = '';
   }
 
   // ============================================================================
@@ -1233,34 +1185,23 @@
     <h2>Захваченные сообщения ({filteredMessageCount}{filterRequestId ? ` из ${totalMessageCount}` : ''})</h2>
 
     {#if groupByRequestId && groupedMessages}
-      <!-- Grouped view by Request ID (supports 1:N request→responses) -->
+      <!-- Grouped view by Request ID -->
       <div class="grouped-messages">
         {#each [...groupedMessages.entries()] as [requestId, msgs]}
           <div class="request-group">
             <div class="group-header">
               <strong>ID запроса:</strong> {requestId}
-              <span class="group-count">
-                ({msgs.length} {getMessageWord(msgs.length)}
-                {#if msgs.length > 1}
-                  <!-- Show breakdown for multiple messages -->
-                  — {msgs.filter(m => m.type === 'sent').length} отправл., 
-                  {msgs.filter(m => m.type === 'received').length} получ.
-                {/if})
-              </span>
+              <span class="group-count">({msgs.length} {getMessageWord(msgs.length)})</span>
             </div>
             <div class="group-messages">
               {#each msgs as message, index}
                 {@const globalIndex = `group-${requestId}-${index}`}
                 {@const isExpanded = expandedMessages.has(globalIndex)}
                 {@const parsedData = parseMessageData(message)}
-                {@const responseNumber = message.type === 'received' 
-                  ? msgs.slice(0, index).filter(m => m.type === 'received').length + 1 
-                  : 0}
-                {@const messageLabel = message.type === 'sent' ? 'Запрос' : `Ответ ${responseNumber}`}
 
                 <div class="message-item" class:sent={message.type === 'sent'} class:received={message.type === 'received'}>
                   <div class="message-header">
-                    <span class="message-type">{messageLabel}</span>
+                    <span class="message-type">{message.type}</span>
                     <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
                     <button
                       class="expand-btn"
