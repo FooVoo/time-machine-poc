@@ -642,6 +642,7 @@
           clearTimeout(connectionTimeout);
           connectionTimeout = null;
         }
+        isConnected = false;
         statusMessage = 'Ошибка WebSocket соединения';
       };
 
