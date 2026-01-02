@@ -102,8 +102,9 @@ export default [
       'svelte/valid-compile': 'error',
       'svelte/require-each-key': 'error',
       
-      // Disable rules that conflict with Svelte 5 runes ($state, $derived)
-      'prefer-const': 'off', // $state variables use 'let' even if not reassigned
+      // Svelte 5 runes ($state, $derived) require 'let' even when not reassigned
+      // This is a language requirement, not a style choice, so we disable prefer-const
+      'prefer-const': 'off',
       'no-unused-vars': ['error', {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^(_|\\$)',
