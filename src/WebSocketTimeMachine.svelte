@@ -727,12 +727,6 @@
   // ============================================================================
   
   /**
-   * Clears all captured messages from worker storage
-   * Resets pagination and filters to initial state.
-   * 
-   * @returns {void}
-   */
-  /**
    * Clears all messages from storage
    * Shows confirmation dialog before destructive action.
    * 
