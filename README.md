@@ -159,6 +159,32 @@ For detailed performance information, see [PERFORMANCE.md](PERFORMANCE.md).
 
 **Tested with**: 10,000+ messages, 5-10MB JSON files
 
+## Code Quality
+
+This project uses ESLint and Prettier for code quality and formatting:
+
+### Available Scripts
+
+```bash
+# Check for linting errors
+npm run lint
+
+# Auto-fix linting errors where possible
+npm run lint:fix
+
+# Check code formatting
+npm run format:check
+
+# Auto-format all files
+npm run format
+```
+
+### Configuration
+
+- **ESLint**: Configured with strict rules for JavaScript and Svelte
+- **Prettier**: Configured for consistent code formatting with Svelte support
+- Configuration files: `eslint.config.js`, `.prettierrc`, `.prettierignore`
+
 ## License
 
 ISC
