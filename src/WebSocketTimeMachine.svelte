@@ -363,8 +363,6 @@
 <style>
   :host {
     --json-viewer-max-height: 400px;
-    --mobile-breakpoint: 768px;
-    --desktop-breakpoint: 1024px;
   }
 
   .container {
