@@ -5,10 +5,6 @@
 
   let { data, messageIndex, expandedPaths, onTogglePath, path = '' } = $props();
 
-  function isExpanded(itemPath) {
-    return expandedPaths?.has(itemPath) || false;
-  }
-
   function togglePath(itemPath) {
     onTogglePath?.(messageIndex, itemPath);
   }
@@ -20,7 +16,7 @@
       {@const itemPath = `${path}[${index}]`}
       {@const itemType = getValueType(item)}
       {@const isComplex = itemType === 'object' || itemType === 'array'}
-      {@const expanded = isExpanded(itemPath)}
+      {@const expanded = expandedPaths?.has(itemPath) || false}
 
       <div class="nested-item">
         <div class="nested-key">
@@ -54,7 +50,7 @@
       {@const itemPath = path ? `${path}.${key}` : key}
       {@const itemType = getValueType(value)}
       {@const isComplex = itemType === 'object' || itemType === 'array'}
-      {@const expanded = isExpanded(itemPath)}
+      {@const expanded = expandedPaths?.has(itemPath) || false}
 
       <div class="nested-item">
         <div class="nested-key">

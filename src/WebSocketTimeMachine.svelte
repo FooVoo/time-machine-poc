@@ -37,8 +37,8 @@
   // UI state using reactive Map and Set in Svelte 5
   let primitiveFields = new SvelteSet();
   let fieldValues = new SvelteMap();
-  let expandedMessages = new SvelteSet();
-  let expandedNestedPaths = new SvelteMap();
+  let expandedMessages = $state(new Set());
+  let expandedNestedPaths = $state(new Map());
 
   // Derived state - field extraction
   let availableFields = $derived.by(() => getAllFieldPaths($messages));
@@ -249,7 +249,7 @@
     }
   }
 
-  // UI handlers - using reactive Set and Map
+  // UI handlers - using reactive Set and Map with $state()
   function toggleMessageExpansion(index) {
     if (expandedMessages.has(index)) {
       expandedMessages.delete(index);
@@ -260,9 +260,6 @@
         expandedNestedPaths.set(index, new Set());
       }
     }
-    // Trigger reactivity by reassigning
-    expandedMessages = expandedMessages;
-    expandedNestedPaths = expandedNestedPaths;
   }
 
   function toggleNestedPath(messageIndex, path) {
@@ -275,8 +272,6 @@
     } else {
       paths.add(path);
     }
-    // Trigger reactivity
-    expandedNestedPaths = expandedNestedPaths;
   }
 
   // Pagination handlers
