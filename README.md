@@ -159,6 +159,49 @@ For detailed performance information, see [PERFORMANCE.md](PERFORMANCE.md).
 
 **Tested with**: 10,000+ messages, 5-10MB JSON files
 
+## Code Quality
+
+This project uses ESLint and Prettier for code quality and formatting with strict rule enforcement.
+
+### Quick Start
+
+```bash
+# Check for linting and formatting issues
+npm run quality
+
+# Auto-fix issues where possible
+npm run quality:fix
+```
+
+### Individual Commands
+
+```bash
+# Linting
+npm run lint           # Check for linting errors
+npm run lint:fix       # Auto-fix linting errors
+
+# Formatting
+npm run format:check   # Check code formatting
+npm run format         # Auto-format all files
+```
+
+### Documentation
+
+For comprehensive documentation including:
+- Workflow diagrams
+- Detailed rule explanations
+- Common issues and solutions
+- CI/CD integration
+- Migration guide
+
+See **[LINTING_GUIDE.md](./LINTING_GUIDE.md)**
+
+### Configuration Files
+
+- **ESLint**: `eslint.config.js` - 46+ strict rules with ignore patterns
+- **Prettier**: `.prettierrc`, `.prettierignore` - Consistent formatting
+- **Svelte 5 Support**: Special handling for runes (`$state`, `$derived`)
+
 ## License
 
 ISC

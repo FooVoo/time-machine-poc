@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1aa425a7-994c-4f6b-839c-fb9e21766332" name="Changes" comment="fix(websocket): improve filtering logic and pagination handling">
+    <list default="true" id="1aa425a7-994c-4f6b-839c-fb9e21766332" name="Changes" comment="refactor(WebSocketTimeMachine): replace Sets and Maps with Svelte reactivity">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/WebSocketTimeMachine.svelte" beforeDir="false" afterPath="$PROJECT_DIR$/src/WebSocketTimeMachine.svelte" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -57,26 +56,29 @@
       </RecentBranches>
     </option>
   </component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/FooVoo/time-machine-poc.git",
-    "accountId": "2f4ec3b9-1d30-4522-b11c-445d29c2b14c"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/FooVoo/time-machine-poc.git&quot;,
+    &quot;accountId&quot;: &quot;2f4ec3b9-1d30-4522-b11c-445d29c2b14c&quot;
   },
-  "recentNewPullRequestHead": {
-    "server": {
-      "useHttp": false,
-      "host": "github.com",
-      "port": null,
-      "suffix": null
+  &quot;recentNewPullRequestHead&quot;: {
+    &quot;server&quot;: {
+      &quot;useHttp&quot;: false,
+      &quot;host&quot;: &quot;github.com&quot;,
+      &quot;port&quot;: null,
+      &quot;suffix&quot;: null
     },
-    "owner": "FooVoo",
-    "repository": "time-machine-poc"
+    &quot;owner&quot;: &quot;FooVoo&quot;,
+    &quot;repository&quot;: &quot;time-machine-poc&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 3
 }</component>
   <component name="ProjectId" id="37e4yv6f5OvuyTJYX6RRhOrBDwl" />
+  <component name="ProjectLevelVcsManager">
+    <OptionsSetting value="false" id="Update" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -90,7 +92,7 @@
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "git-widget-placeholder": "#2 on filtering-fix",
+    "git-widget-placeholder": "#5 on copilot/add-eslint-prettier-configs",
     "javascript.preferred.runtime.type.id": "node",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -146,7 +148,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767259192647</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="refactor(WebSocketTimeMachine): replace Sets and Maps with Svelte reactivity">
+      <option name="closed" value="true" />
+      <created>1767450553258</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1767450553258</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -155,7 +165,8 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="fix(websocket): fix filtering issues, adjust message handling" />
     <MESSAGE value="fix(websocket): improve filtering logic and pagination handling" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix(websocket): improve filtering logic and pagination handling" />
+    <MESSAGE value="refactor(WebSocketTimeMachine): replace Sets and Maps with Svelte reactivity" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor(WebSocketTimeMachine): replace Sets and Maps with Svelte reactivity" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>
