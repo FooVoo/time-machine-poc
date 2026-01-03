@@ -1,7 +1,7 @@
 <svelte:options customElement="websocket-time-machine" />
 
 <script>
-  // Smart Component - Contains business logic and state management
+  // Smart Component - Contains business logic and state management using stores
   import ConnectionPanel from './lib/components/connection/ConnectionPanel.svelte';
   import FilterPanel from './lib/components/filters/FilterPanel.svelte';
   import ActionsPanel from './lib/components/actions/ActionsPanel.svelte';
@@ -9,30 +9,107 @@
   import { i18n, getMessageWord } from './lib/utils/i18n.js';
   import { parseMessageData } from './lib/utils/message-utils.js';
   import { getNestedValue, extractFieldPaths } from './lib/utils/filter-utils.js';
+  import {
+    wsConnection,
+    autoCapture as autoCaptureStore,
+    connectWebSocket,
+    disconnectWebSocket,
+  } from './lib/stores/websocket.js';
+  import {
+    messages as messagesStore,
+    pagination as paginationStore,
+    addMessage,
+    clearMessages as clearMessagesAction,
+    importMessages as importMessagesAction,
+  } from './lib/stores/messages.js';
+  import {
+    filterRequestId as filterRequestIdStore,
+    customFilterField as customFilterFieldStore,
+    customFilterValue as customFilterValueStore,
+    groupByRequestId as groupByRequestIdStore,
+  } from './lib/stores/filters.js';
 
-  // WebSocket connection state
+  // Local component state using stores
   let wsUrl = $state('');
   let ws = null;
-  let isConnected = $state(false);
-  let statusMessage = $state('');
 
-  // Messages state
-  let messages = $state([]);
-  let autoCapture = $state(false);
+  // Subscribe to stores using $state for local reactive copies
+  let messages = $state($messagesStore);
+  let autoCapture = $state($autoCaptureStore);
+  let isConnected = $state($wsConnection.isConnected);
+  let statusMessage = $state($wsConnection.statusMessage);
+  let filterRequestId = $state($filterRequestIdStore);
+  let customFilterField = $state($customFilterFieldStore);
+  let customFilterValue = $state($customFilterValueStore);
+  let groupByRequestId = $state($groupByRequestIdStore);
+  let currentPage = $state($paginationStore.currentPage);
+  let messagesPerPage = $state($paginationStore.messagesPerPage);
 
-  // Filtering state
-  let filterRequestId = $state('');
-  let groupByRequestId = $state(false);
-  let customFilterField = $state('');
-  let customFilterValue = $state('');
+  // Sync local state with stores using $effect
+  $effect(() => {
+    const unsubMessages = messagesStore.subscribe((value) => {
+      messages = value;
+    });
+    const unsubAutoCapture = autoCaptureStore.subscribe((value) => {
+      autoCapture = value;
+    });
+    const unsubWsConnection = wsConnection.subscribe(({ isConnected: connected, statusMessage: status, ws: websocket }) => {
+      isConnected = connected;
+      statusMessage = status;
+      ws = websocket;
+    });
+    const unsubFilterRequestId = filterRequestIdStore.subscribe((value) => {
+      filterRequestId = value;
+    });
+    const unsubCustomFilterField = customFilterFieldStore.subscribe((value) => {
+      customFilterField = value;
+    });
+    const unsubCustomFilterValue = customFilterValueStore.subscribe((value) => {
+      customFilterValue = value;
+    });
+    const unsubGroupByRequestId = groupByRequestIdStore.subscribe((value) => {
+      groupByRequestId = value;
+    });
+    const unsubPagination = paginationStore.subscribe(({ currentPage: page, messagesPerPage: perPage }) => {
+      currentPage = page;
+      messagesPerPage = perPage;
+    });
 
-  // Pagination state
-  let currentPage = $state(0);
-  let messagesPerPage = $state(50);
+    return () => {
+      unsubMessages();
+      unsubAutoCapture();
+      unsubWsConnection();
+      unsubFilterRequestId();
+      unsubCustomFilterField();
+      unsubCustomFilterValue();
+      unsubGroupByRequestId();
+      unsubPagination();
+    };
+  });
 
-  // UI state
-  let primitiveFields = new Set();
-  let fieldValues = new Map();
+  // Sync local changes back to stores
+  $effect(() => {
+    autoCaptureStore.set(autoCapture);
+  });
+  $effect(() => {
+    filterRequestIdStore.set(filterRequestId);
+  });
+  $effect(() => {
+    customFilterFieldStore.set(customFilterField);
+  });
+  $effect(() => {
+    customFilterValueStore.set(customFilterValue);
+  });
+  $effect(() => {
+    groupByRequestIdStore.set(groupByRequestId);
+  });
+  $effect(() => {
+    paginationStore.update((p) => ({ ...p, currentPage }));
+  });
+
+  // UI state using SvelteMap and SvelteSet (reactive Map and Set in Svelte 5)
+  let primitiveFields = $state(new Set());
+  let fieldValues = $state(new Map());
   let expandedMessages = $state(new Set());
   let expandedNestedPaths = $state(new Map());
 
@@ -141,7 +218,7 @@
     });
   }
 
-  // Group messages by requestId
+  // Group messages by requestId - returns a regular Map (reactive through $derived)
   function groupMessagesByRequestId(msgs) {
     const groups = new Map();
 
@@ -162,14 +239,9 @@
 
   // WebSocket handlers
   function connect() {
-    try {
-      ws = new WebSocket(wsUrl);
+    ws = connectWebSocket(wsUrl);
 
-      ws.onopen = () => {
-        isConnected = true;
-        statusMessage = `${i18n.connectedTo(wsUrl)}`;
-      };
-
+    if (ws) {
       ws.onmessage = (event) => {
         if (autoCapture) {
           const message = {
@@ -178,42 +250,26 @@
             data: event.data,
           };
           const wasOnLastPage = currentPage === totalPages - 1 || messages.length === 0;
-          messages.push(message);
-          messages = messages;
+          addMessage(message);
 
           if (wasOnLastPage) {
             currentPage = Math.max(0, Math.ceil(messages.length / messagesPerPage) - 1);
           }
         }
       };
-
-      ws.onerror = () => {
-        statusMessage = i18n.connectionError;
-      };
-
-      ws.onclose = () => {
-        isConnected = false;
-        statusMessage = i18n.disconnectedStatus;
-      };
-    } catch (error) {
-      statusMessage = i18n.connectionErrorWithMsg(error.message);
     }
   }
 
   function disconnect() {
-    if (ws) {
-      ws.close();
-      ws = null;
-      isConnected = false;
-    }
+    disconnectWebSocket();
   }
 
   // Message operations
   function clearMessages() {
-    messages = [];
-    currentPage = 0;
+    clearMessagesAction();
     filterRequestId = '';
     statusMessage = i18n.messagesCleared;
+    wsConnection.update((state) => ({ ...state, statusMessage: i18n.messagesCleared }));
   }
 
   function exportMessages() {
@@ -226,12 +282,14 @@
     link.click();
     URL.revokeObjectURL(url);
     statusMessage = i18n.messagesExported;
+    wsConnection.update((state) => ({ ...state, statusMessage: i18n.messagesExported }));
   }
 
   function handleImport(event) {
     const file = event.target.files[0];
     if (file) {
       statusMessage = i18n.importing;
+      wsConnection.update((state) => ({ ...state, statusMessage: i18n.importing }));
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
@@ -241,21 +299,29 @@
               : JSON.parse(new TextDecoder().decode(e.target.result));
           if (!Array.isArray(imported)) {
             statusMessage = i18n.importError;
+            wsConnection.update((state) => ({ ...state, statusMessage: i18n.importError }));
             return;
           }
 
-          messages = imported.slice();
-          currentPage = 0;
+          importMessagesAction(imported);
           statusMessage = i18n.imported(messages.length, getMessageWord(messages.length));
+          wsConnection.update((state) => ({
+            ...state,
+            statusMessage: i18n.imported(imported.length, getMessageWord(imported.length)),
+          }));
         } catch {
           statusMessage = i18n.importErrorInvalidJson;
+          wsConnection.update((state) => ({
+            ...state,
+            statusMessage: i18n.importErrorInvalidJson,
+          }));
         }
       };
       reader.readAsText(file);
     }
   }
 
-  // UI handlers
+  // UI handlers - using reactive Set and Map
   function toggleMessageExpansion(index) {
     if (expandedMessages.has(index)) {
       expandedMessages.delete(index);
@@ -266,6 +332,7 @@
         expandedNestedPaths.set(index, new Set());
       }
     }
+    // Trigger reactivity by reassigning
     expandedMessages = expandedMessages;
     expandedNestedPaths = expandedNestedPaths;
   }
@@ -280,6 +347,7 @@
     } else {
       paths.add(path);
     }
+    // Trigger reactivity
     expandedNestedPaths = expandedNestedPaths;
   }
 
