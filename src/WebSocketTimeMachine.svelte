@@ -1,7 +1,7 @@
 <svelte:options customElement="websocket-time-machine" />
 
 <script>
-  // Smart Component - Contains business logic and state management using stores
+  // Smart Component - Uses stores directly for state management
   import ConnectionPanel from './lib/components/connection/ConnectionPanel.svelte';
   import FilterPanel from './lib/components/filters/FilterPanel.svelte';
   import ActionsPanel from './lib/components/actions/ActionsPanel.svelte';
@@ -11,147 +11,76 @@
   import { getNestedValue, extractFieldPaths } from './lib/utils/filter-utils.js';
   import {
     wsConnection,
-    autoCapture as autoCaptureStore,
+    autoCapture,
     connectWebSocket,
     disconnectWebSocket,
   } from './lib/stores/websocket.js';
   import {
-    messages as messagesStore,
-    pagination as paginationStore,
+    messages,
+    pagination,
     addMessage,
     clearMessages as clearMessagesAction,
     importMessages as importMessagesAction,
   } from './lib/stores/messages.js';
   import {
-    filterRequestId as filterRequestIdStore,
-    customFilterField as customFilterFieldStore,
-    customFilterValue as customFilterValueStore,
-    groupByRequestId as groupByRequestIdStore,
+    filterRequestId,
+    customFilterField,
+    customFilterValue,
+    groupByRequestId,
   } from './lib/stores/filters.js';
 
-  // Local component state using stores
+  // Local UI-only state
   let wsUrl = $state('');
   let ws = null;
-
-  // Subscribe to stores using $state for local reactive copies
-  let messages = $state($messagesStore);
-  let autoCapture = $state($autoCaptureStore);
-  let isConnected = $state($wsConnection.isConnected);
-  let statusMessage = $state($wsConnection.statusMessage);
-  let filterRequestId = $state($filterRequestIdStore);
-  let customFilterField = $state($customFilterFieldStore);
-  let customFilterValue = $state($customFilterValueStore);
-  let groupByRequestId = $state($groupByRequestIdStore);
-  let currentPage = $state($paginationStore.currentPage);
-  let messagesPerPage = $state($paginationStore.messagesPerPage);
-
-  // Sync local state with stores using $effect
-  $effect(() => {
-    const unsubMessages = messagesStore.subscribe((value) => {
-      messages = value;
-    });
-    const unsubAutoCapture = autoCaptureStore.subscribe((value) => {
-      autoCapture = value;
-    });
-    const unsubWsConnection = wsConnection.subscribe(({ isConnected: connected, statusMessage: status, ws: websocket }) => {
-      isConnected = connected;
-      statusMessage = status;
-      ws = websocket;
-    });
-    const unsubFilterRequestId = filterRequestIdStore.subscribe((value) => {
-      filterRequestId = value;
-    });
-    const unsubCustomFilterField = customFilterFieldStore.subscribe((value) => {
-      customFilterField = value;
-    });
-    const unsubCustomFilterValue = customFilterValueStore.subscribe((value) => {
-      customFilterValue = value;
-    });
-    const unsubGroupByRequestId = groupByRequestIdStore.subscribe((value) => {
-      groupByRequestId = value;
-    });
-    const unsubPagination = paginationStore.subscribe(({ currentPage: page, messagesPerPage: perPage }) => {
-      currentPage = page;
-      messagesPerPage = perPage;
-    });
-
-    return () => {
-      unsubMessages();
-      unsubAutoCapture();
-      unsubWsConnection();
-      unsubFilterRequestId();
-      unsubCustomFilterField();
-      unsubCustomFilterValue();
-      unsubGroupByRequestId();
-      unsubPagination();
-    };
-  });
-
-  // Sync local changes back to stores
-  $effect(() => {
-    autoCaptureStore.set(autoCapture);
-  });
-  $effect(() => {
-    filterRequestIdStore.set(filterRequestId);
-  });
-  $effect(() => {
-    customFilterFieldStore.set(customFilterField);
-  });
-  $effect(() => {
-    customFilterValueStore.set(customFilterValue);
-  });
-  $effect(() => {
-    groupByRequestIdStore.set(groupByRequestId);
-  });
-  $effect(() => {
-    paginationStore.update((p) => ({ ...p, currentPage }));
-  });
-
-  // UI state using SvelteMap and SvelteSet (reactive Map and Set in Svelte 5)
+  
+  // UI state using reactive Map and Set in Svelte 5
   let primitiveFields = $state(new Set());
   let fieldValues = $state(new Map());
   let expandedMessages = $state(new Set());
   let expandedNestedPaths = $state(new Map());
 
   // Derived state - field extraction
-  let availableFields = $derived.by(() => getAllFieldPaths(messages));
-  let fieldIsFilterable = $derived(primitiveFields.has(customFilterField));
+  let availableFields = $derived.by(() => getAllFieldPaths($messages));
+  let fieldIsFilterable = $derived(primitiveFields.has($customFilterField));
   let availableValues = $derived.by(() => {
     if (!fieldIsFilterable) {
       return [];
     }
-    if (!fieldValues.has(customFilterField)) {
+    if (!fieldValues.has($customFilterField)) {
       return [];
     }
-    return Array.from(fieldValues.get(customFilterField)).sort();
+    return Array.from(fieldValues.get($customFilterField)).sort();
   });
 
   // Derived state - filtering
   let filteredByRequestId = $derived.by(() => {
-    if (!filterRequestId) {
-      return messages;
+    if (!$filterRequestId) {
+      return $messages;
     }
-    return messages.filter((msg) => {
+    return $messages.filter((msg) => {
       const data = parseMessageData(msg);
-      return data && data.requestId && data.requestId.includes(filterRequestId);
+      return data && data.requestId && data.requestId.includes($filterRequestId);
     });
   });
 
   let filteredMessages = $derived(filterByCustomField(filteredByRequestId));
 
   let groupedMessages = $derived.by(() => {
-    if (!groupByRequestId) {
+    if (!$groupByRequestId) {
       return null;
     }
     return groupMessagesByRequestId(filteredMessages);
   });
 
   // Derived state - pagination
-  let totalPages = $derived(Math.ceil(filteredMessages.length / messagesPerPage));
+  let totalPages = $derived(Math.ceil(filteredMessages.length / $pagination.messagesPerPage));
   let visibleMessages = $derived(
-    filteredMessages.slice(currentPage * messagesPerPage, (currentPage + 1) * messagesPerPage)
+    filteredMessages.slice(
+      $pagination.currentPage * $pagination.messagesPerPage,
+      ($pagination.currentPage + 1) * $pagination.messagesPerPage
+    )
   );
-  let startIndex = $derived(currentPage * messagesPerPage);
+  let startIndex = $derived($pagination.currentPage * $pagination.messagesPerPage);
 
   // Get all available field paths from messages
   function getAllFieldPaths(msgs) {
@@ -189,22 +118,22 @@
 
   // Filter messages by custom field
   function filterByCustomField(msgs) {
-    if (!customFilterField || !customFilterValue) {
+    if (!$customFilterField || !$customFilterValue) {
       return msgs;
     }
 
     return msgs.filter((msg) => {
       let value;
 
-      if (customFilterField.startsWith('data.')) {
+      if ($customFilterField.startsWith('data.')) {
         const data = parseMessageData(msg);
         if (!data) {
           return false;
         }
-        const fieldPath = customFilterField.substring(5);
+        const fieldPath = $customFilterField.substring(5);
         value = getNestedValue(data, fieldPath);
       } else {
-        value = msg[customFilterField];
+        value = msg[$customFilterField];
       }
 
       if (value === undefined || value === null) {
@@ -212,7 +141,7 @@
       }
 
       const valueStr = String(value).toLowerCase();
-      const filterStr = customFilterValue.toLowerCase();
+      const filterStr = $customFilterValue.toLowerCase();
 
       return valueStr.includes(filterStr);
     });
@@ -243,17 +172,21 @@
 
     if (ws) {
       ws.onmessage = (event) => {
-        if (autoCapture) {
+        if ($autoCapture) {
           const message = {
             timestamp: new Date().toISOString(),
             type: 'received',
             data: event.data,
           };
-          const wasOnLastPage = currentPage === totalPages - 1 || messages.length === 0;
+          const wasOnLastPage =
+            $pagination.currentPage === totalPages - 1 || $messages.length === 0;
           addMessage(message);
 
           if (wasOnLastPage) {
-            currentPage = Math.max(0, Math.ceil(messages.length / messagesPerPage) - 1);
+            pagination.update((p) => ({
+              ...p,
+              currentPage: Math.max(0, Math.ceil($messages.length / p.messagesPerPage) - 1),
+            }));
           }
         }
       };
@@ -267,13 +200,12 @@
   // Message operations
   function clearMessages() {
     clearMessagesAction();
-    filterRequestId = '';
-    statusMessage = i18n.messagesCleared;
+    filterRequestId.set('');
     wsConnection.update((state) => ({ ...state, statusMessage: i18n.messagesCleared }));
   }
 
   function exportMessages() {
-    const dataStr = JSON.stringify(messages, null, 2);
+    const dataStr = JSON.stringify($messages, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
@@ -281,14 +213,12 @@
     link.download = `websocket-messages-${Date.now()}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    statusMessage = i18n.messagesExported;
     wsConnection.update((state) => ({ ...state, statusMessage: i18n.messagesExported }));
   }
 
   function handleImport(event) {
     const file = event.target.files[0];
     if (file) {
-      statusMessage = i18n.importing;
       wsConnection.update((state) => ({ ...state, statusMessage: i18n.importing }));
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -298,19 +228,16 @@
               ? JSON.parse(e.target.result)
               : JSON.parse(new TextDecoder().decode(e.target.result));
           if (!Array.isArray(imported)) {
-            statusMessage = i18n.importError;
             wsConnection.update((state) => ({ ...state, statusMessage: i18n.importError }));
             return;
           }
 
           importMessagesAction(imported);
-          statusMessage = i18n.imported(messages.length, getMessageWord(messages.length));
           wsConnection.update((state) => ({
             ...state,
             statusMessage: i18n.imported(imported.length, getMessageWord(imported.length)),
           }));
         } catch {
-          statusMessage = i18n.importErrorInvalidJson;
           wsConnection.update((state) => ({
             ...state,
             statusMessage: i18n.importErrorInvalidJson,
@@ -353,19 +280,24 @@
 
   // Pagination handlers
   function nextPage() {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-    }
+    pagination.update((p) => ({
+      ...p,
+      currentPage: Math.min(p.currentPage + 1, totalPages - 1),
+    }));
   }
 
   function prevPage() {
-    if (currentPage > 0) {
-      currentPage--;
-    }
+    pagination.update((p) => ({
+      ...p,
+      currentPage: Math.max(p.currentPage - 1, 0),
+    }));
   }
 
   function goToLastPage() {
-    currentPage = Math.max(0, totalPages - 1);
+    pagination.update((p) => ({
+      ...p,
+      currentPage: Math.max(0, totalPages - 1),
+    }));
   }
 </script>
 
@@ -377,38 +309,38 @@
 
   <ConnectionPanel
     bind:wsUrl
-    {isConnected}
-    {statusMessage}
+    isConnected={$wsConnection.isConnected}
+    statusMessage={$wsConnection.statusMessage}
     onConnect={connect}
     onDisconnect={disconnect}
   />
 
   <div class="capture-panel">
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={autoCapture} />
+      <input type="checkbox" bind:checked={$autoCapture} />
       {i18n.autoCapture}
     </label>
   </div>
 
   <FilterPanel
-    bind:filterRequestId
-    bind:customFilterField
-    bind:customFilterValue
-    bind:groupByRequestId
+    bind:filterRequestId={$filterRequestId}
+    bind:customFilterField={$customFilterField}
+    bind:customFilterValue={$customFilterValue}
+    bind:groupByRequestId={$groupByRequestId}
     {availableFields}
     {fieldIsFilterable}
     {availableValues}
   />
 
-  <ActionsPanel {messages} onExport={exportMessages} onImport={handleImport} onClear={clearMessages} />
+  <ActionsPanel messages={$messages} onExport={exportMessages} onImport={handleImport} onClear={clearMessages} />
 
   <MessagesPanel
-    {messages}
+    messages={$messages}
     {filteredMessages}
-    {groupByRequestId}
+    groupByRequestId={$groupByRequestId}
     {groupedMessages}
-    {currentPage}
-    {messagesPerPage}
+    currentPage={$pagination.currentPage}
+    messagesPerPage={$pagination.messagesPerPage}
     {totalPages}
     {visibleMessages}
     {startIndex}
