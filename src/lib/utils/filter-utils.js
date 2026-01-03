@@ -25,10 +25,14 @@ export function getNestedValue(obj, path) {
 
 /**
  * Extract all field paths from an object (including nested) and track primitives
+ * 
+ * NOTE: This function mutates the primFields and valuesMap parameters.
+ * It populates them with discovered field paths and their values.
+ * 
  * @param {Object} obj - Object to extract from
  * @param {string} prefix - Path prefix
- * @param {Set} primFields - Set to store primitive field paths
- * @param {Map} valuesMap - Map to store field values
+ * @param {Set} primFields - Set to populate with primitive field paths (mutated)
+ * @param {Map} valuesMap - Map to populate with field values (mutated)
  * @returns {Array<string>} Array of field paths
  */
 export function extractFieldPaths(obj, prefix = '', primFields, valuesMap) {

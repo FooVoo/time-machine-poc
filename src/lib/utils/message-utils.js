@@ -8,6 +8,9 @@
  * @returns {Object|null} Parsed JSON object or null if parsing fails
  */
 export function parseMessageData(msg) {
+  if (!msg || !('data' in msg)) {
+    return null;
+  }
   try {
     return typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
   } catch {
