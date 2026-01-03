@@ -1,5 +1,6 @@
 <script>
   import { formatValue, getValueType, getValuePreview } from '../../utils/message-utils.js';
+  import { i18n } from '../../utils/i18n.js';
   import NestedDataViewer from './NestedDataViewer.svelte';
 
   let { data, messageIndex, expandedPaths, onTogglePath, path = '' } = $props();
@@ -27,7 +28,7 @@
             <button
               class="nested-toggle"
               onclick={() => togglePath(itemPath)}
-              title={expanded ? 'Свернуть' : 'Развернуть'}
+              title={expanded ? i18n.collapse : i18n.expand}
             >
               {expanded ? '▼' : '▶'}
             </button>
@@ -61,7 +62,7 @@
             <button
               class="nested-toggle"
               onclick={() => togglePath(itemPath)}
-              title={expanded ? 'Свернуть' : 'Развернуть'}
+              title={expanded ? i18n.collapse : i18n.expand}
             >
               {expanded ? '▼' : '▶'}
             </button>

@@ -29,7 +29,7 @@
     <span class="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
     <button
       class="expand-btn"
-      onclick={() => onToggleExpand(index)}
+      onclick={onToggleExpand}
       title={isExpanded ? i18n.collapseJson : i18n.expandJson}
     >
       {isExpanded ? '▼' : '▶'}
