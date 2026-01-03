@@ -161,29 +161,46 @@ For detailed performance information, see [PERFORMANCE.md](PERFORMANCE.md).
 
 ## Code Quality
 
-This project uses ESLint and Prettier for code quality and formatting:
+This project uses ESLint and Prettier for code quality and formatting with strict rule enforcement.
 
-### Available Scripts
+### Quick Start
 
 ```bash
-# Check for linting errors
-npm run lint
+# Check for linting and formatting issues
+npm run quality
 
-# Auto-fix linting errors where possible
-npm run lint:fix
-
-# Check code formatting
-npm run format:check
-
-# Auto-format all files
-npm run format
+# Auto-fix issues where possible
+npm run quality:fix
 ```
 
-### Configuration
+### Individual Commands
 
-- **ESLint**: Configured with strict rules for JavaScript and Svelte
-- **Prettier**: Configured for consistent code formatting with Svelte support
-- Configuration files: `eslint.config.js`, `.prettierrc`, `.prettierignore`
+```bash
+# Linting
+npm run lint           # Check for linting errors
+npm run lint:fix       # Auto-fix linting errors
+
+# Formatting
+npm run format:check   # Check code formatting
+npm run format         # Auto-format all files
+```
+
+### Documentation
+
+For comprehensive documentation including:
+- Workflow diagrams
+- Detailed rule explanations
+- Common issues and solutions
+- CI/CD integration
+- Migration guide
+
+See **[LINTING_GUIDE.md](./LINTING_GUIDE.md)**
+
+### Configuration Files
+
+- **ESLint**: `eslint.config.js` - 46+ strict rules with ignore patterns
+- **Prettier**: `.prettierrc`, `.prettierignore` - Consistent formatting
+- **Svelte 5 Support**: Special handling for runes (`$state`, `$derived`)
 
 ## License
 

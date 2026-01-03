@@ -6,11 +6,11 @@ import globals from 'globals';
 export default [
   // JavaScript recommended rules
   js.configs.recommended,
-  
+
   // Svelte plugin configs
   ...svelte.configs['flat/recommended'],
   ...svelte.configs['flat/prettier'],
-  
+
   // Global configuration
   {
     languageOptions: {
@@ -24,10 +24,13 @@ export default [
     },
     rules: {
       // Strict rules for code quality
-      'no-unused-vars': ['error', { 
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-      }],
+      'no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
+      ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'error',
       'no-alert': 'error',
@@ -37,16 +40,19 @@ export default [
       'prefer-template': 'error',
       'prefer-spread': 'error',
       'prefer-rest-params': 'error',
-      'prefer-destructuring': ['error', {
-        array: false,
-        object: true,
-      }],
+      'prefer-destructuring': [
+        'error',
+        {
+          array: false,
+          object: true,
+        },
+      ],
       'no-implicit-coercion': 'error',
       'no-param-reassign': 'error',
       'no-shadow': 'error',
       'no-use-before-define': ['error', { functions: false, classes: true }],
-      'eqeqeq': ['error', 'always', { null: 'ignore' }],
-      'curly': ['error', 'all'],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      curly: ['error', 'all'],
       'no-eval': 'error',
       'no-implied-eval': 'error',
       'no-new-func': 'error',
@@ -75,9 +81,9 @@ export default [
       'no-useless-concat': 'error',
       'no-useless-return': 'error',
       'prefer-promise-reject-errors': 'error',
-      'radix': 'error',
-      'yoda': 'error',
-      
+      radix: 'error',
+      yoda: 'error',
+
       // Best practices for modern JavaScript
       'no-duplicate-imports': 'error',
       'no-useless-computed-key': 'error',
@@ -88,7 +94,7 @@ export default [
       'symbol-description': 'error',
     },
   },
-  
+
   // Svelte-specific rules
   {
     files: ['**/*.svelte'],
@@ -100,17 +106,20 @@ export default [
       'svelte/require-store-reactive-access': 'error',
       'svelte/valid-compile': 'error',
       'svelte/require-each-key': 'error',
-      
+
       // Svelte 5 runes ($state, $derived) require 'let' even when not reassigned
       // This is a language requirement, not a style choice, so we disable prefer-const
       'prefer-const': 'off',
-      'no-unused-vars': ['error', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^[_$]',
-      }],
+      'no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^[_$]',
+        },
+      ],
     },
   },
-  
+
   // Test files and development utilities
   {
     files: ['test-server.js', '**/test/**', '**/tests/**', '**/*.test.js', '**/*.spec.js'],
@@ -118,10 +127,10 @@ export default [
       'no-console': 'off', // Allow console in test files
     },
   },
-  
+
   // Prettier compatibility (disables conflicting rules)
   prettier,
-  
+
   // Ignore patterns
   {
     ignores: [
