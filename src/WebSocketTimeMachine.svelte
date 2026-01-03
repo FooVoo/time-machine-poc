@@ -28,15 +28,13 @@
     customFilterValue,
     groupByRequestId,
   } from './lib/stores/filters.js';
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-
   // Local UI-only state
   let wsUrl = $state('');
   let ws = null;
 
-  // UI state using reactive Map and Set in Svelte 5
-  let primitiveFields = new SvelteSet();
-  let fieldValues = new SvelteMap();
+  // UI state using reactive Map and Set in Svelte 5 with $state()
+  let primitiveFields = $state(new Set());
+  let fieldValues = $state(new Map());
   let expandedMessages = $state(new Set());
   let expandedNestedPaths = $state(new Map());
 
@@ -85,9 +83,13 @@
 
   // Get all available field paths from messages
   function getAllFieldPaths(msgs) {
-    const fieldsSet = new SvelteSet();
-    const primFields = new SvelteSet();
-    const valuesMap = new SvelteMap();
+    // Use regular Set/Map for local function variables that don't need reactivity
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const fieldsSet = new Set();
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const primFields = new Set();
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const valuesMap = new Map();
 
     for (const msg of msgs) {
       fieldsSet.add('type');
@@ -150,7 +152,9 @@
 
   // Group messages by requestId - returns a regular Map (reactive through $derived)
   function groupMessagesByRequestId(msgs) {
-    const groups = new SvelteMap();
+    // Use regular Map for local function variable that doesn't need reactivity
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const groups = new Map();
 
     for (const msg of msgs) {
       const data = parseMessageData(msg);
