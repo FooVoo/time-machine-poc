@@ -28,13 +28,14 @@
     customFilterValue,
     groupByRequestId,
   } from './lib/stores/filters.js';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   // Local UI-only state
   let wsUrl = $state('');
   let ws = null;
 
   // UI state using reactive Map and Set in Svelte 5 with $state()
-  let primitiveFields = $state(new Set());
-  let fieldValues = $state(new Map());
+  let primitiveFields = new SvelteSet();
+  let fieldValues = new SvelteMap();
   let expandedMessages = $state(new Set());
   let expandedNestedPaths = $state(new Map());
 
@@ -83,13 +84,9 @@
 
   // Get all available field paths from messages
   function getAllFieldPaths(msgs) {
-    // Use regular Set/Map for local function variables that don't need reactivity
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const fieldsSet = new Set();
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const primFields = new Set();
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const valuesMap = new Map();
+    const fieldsSet = new SvelteSet();
+    const primFields = new SvelteSet();
+    const valuesMap = new SvelteMap();
 
     for (const msg of msgs) {
       fieldsSet.add('type');
@@ -98,10 +95,10 @@
       primFields.add('timestamp');
 
       if (!valuesMap.has('type')) {
-        valuesMap.set('type', new Set());
+        valuesMap.set('type', new SvelteSet());
       }
       if (!valuesMap.has('timestamp')) {
-        valuesMap.set('timestamp', new Set());
+        valuesMap.set('timestamp', new SvelteSet());
       }
       valuesMap.get('type').add(String(msg.type));
       valuesMap.get('timestamp').add(String(msg.timestamp));
@@ -112,9 +109,6 @@
         dataPaths.forEach((path) => fieldsSet.add(path));
       }
     }
-
-    primitiveFields = primFields;
-    fieldValues = valuesMap;
 
     return Array.from(fieldsSet).sort();
   }
