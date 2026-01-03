@@ -307,56 +307,64 @@
     <p class="subtitle">{i18n.subtitle}</p>
   </div>
 
-  <ConnectionPanel
-    bind:wsUrl
-    isConnected={$wsConnection.isConnected}
-    statusMessage={$wsConnection.statusMessage}
-    onConnect={connect}
-    onDisconnect={disconnect}
-  />
+  <div class="main-content">
+    <div class="controls-column">
+      <ConnectionPanel
+        bind:wsUrl
+        isConnected={$wsConnection.isConnected}
+        statusMessage={$wsConnection.statusMessage}
+        onConnect={connect}
+        onDisconnect={disconnect}
+      />
 
-  <div class="capture-panel">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={$autoCapture} />
-      {i18n.autoCapture}
-    </label>
+      <div class="capture-panel">
+        <label class="checkbox-label">
+          <input type="checkbox" bind:checked={$autoCapture} />
+          {i18n.autoCapture}
+        </label>
+      </div>
+
+      <FilterPanel
+        bind:filterRequestId={$filterRequestId}
+        bind:customFilterField={$customFilterField}
+        bind:customFilterValue={$customFilterValue}
+        bind:groupByRequestId={$groupByRequestId}
+        {availableFields}
+        {fieldIsFilterable}
+        {availableValues}
+      />
+
+      <ActionsPanel messages={$messages} onExport={exportMessages} onImport={handleImport} onClear={clearMessages} />
+    </div>
+
+    <div class="messages-column">
+      <MessagesPanel
+        messages={$messages}
+        {filteredMessages}
+        groupByRequestId={$groupByRequestId}
+        {groupedMessages}
+        currentPage={$pagination.currentPage}
+        messagesPerPage={$pagination.messagesPerPage}
+        {totalPages}
+        {visibleMessages}
+        {startIndex}
+        {expandedMessages}
+        {expandedNestedPaths}
+        onToggleExpand={toggleMessageExpansion}
+        onTogglePath={toggleNestedPath}
+        onPrevPage={prevPage}
+        onNextPage={nextPage}
+        onLastPage={goToLastPage}
+      />
+    </div>
   </div>
-
-  <FilterPanel
-    bind:filterRequestId={$filterRequestId}
-    bind:customFilterField={$customFilterField}
-    bind:customFilterValue={$customFilterValue}
-    bind:groupByRequestId={$groupByRequestId}
-    {availableFields}
-    {fieldIsFilterable}
-    {availableValues}
-  />
-
-  <ActionsPanel messages={$messages} onExport={exportMessages} onImport={handleImport} onClear={clearMessages} />
-
-  <MessagesPanel
-    messages={$messages}
-    {filteredMessages}
-    groupByRequestId={$groupByRequestId}
-    {groupedMessages}
-    currentPage={$pagination.currentPage}
-    messagesPerPage={$pagination.messagesPerPage}
-    {totalPages}
-    {visibleMessages}
-    {startIndex}
-    {expandedMessages}
-    {expandedNestedPaths}
-    onToggleExpand={toggleMessageExpansion}
-    onTogglePath={toggleNestedPath}
-    onPrevPage={prevPage}
-    onNextPage={nextPage}
-    onLastPage={goToLastPage}
-  />
 </div>
 
 <style>
   :host {
     --json-viewer-max-height: 400px;
+    --mobile-breakpoint: 768px;
+    --desktop-breakpoint: 1024px;
   }
 
   .container {
@@ -369,7 +377,7 @@
       Ubuntu,
       Cantarell,
       sans-serif;
-    max-width: 900px;
+    max-width: 100%;
     margin: 0 auto;
     padding: 20px;
     background: #f5f5f5;
@@ -390,6 +398,61 @@
   .subtitle {
     color: #666;
     margin: 5px 0 0;
+  }
+
+  /* Mobile-first layout: stacked vertically */
+  .main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .controls-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .messages-column {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Tablet breakpoint: 768px and up */
+  @media (min-width: 768px) {
+    .container {
+      padding: 30px;
+    }
+
+    .header h1 {
+      font-size: 32px;
+    }
+  }
+
+  /* Desktop breakpoint: 1024px and up - two-column layout */
+  @media (min-width: 1024px) {
+    .container {
+      max-width: 1400px;
+      padding: 40px;
+    }
+
+    .main-content {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      gap: 30px;
+      align-items: start;
+    }
+
+    .controls-column {
+      position: sticky;
+      top: 20px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+
+    .messages-column {
+      min-width: 0; /* Prevent grid blowout */
+    }
   }
 
   .capture-panel {
