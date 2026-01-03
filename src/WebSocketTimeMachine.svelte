@@ -28,16 +28,17 @@
     customFilterValue,
     groupByRequestId,
   } from './lib/stores/filters.js';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   // Local UI-only state
   let wsUrl = $state('');
   let ws = null;
-  
+
   // UI state using reactive Map and Set in Svelte 5
-  let primitiveFields = $state(new Set());
-  let fieldValues = $state(new Map());
-  let expandedMessages = $state(new Set());
-  let expandedNestedPaths = $state(new Map());
+  let primitiveFields = new SvelteSet();
+  let fieldValues = new SvelteMap();
+  let expandedMessages = new SvelteSet();
+  let expandedNestedPaths = new SvelteMap();
 
   // Derived state - field extraction
   let availableFields = $derived.by(() => getAllFieldPaths($messages));
@@ -84,9 +85,9 @@
 
   // Get all available field paths from messages
   function getAllFieldPaths(msgs) {
-    const fieldsSet = new Set();
-    const primFields = new Set();
-    const valuesMap = new Map();
+    const fieldsSet = new SvelteSet();
+    const primFields = new SvelteSet();
+    const valuesMap = new SvelteMap();
 
     for (const msg of msgs) {
       fieldsSet.add('type');
@@ -149,7 +150,7 @@
 
   // Group messages by requestId - returns a regular Map (reactive through $derived)
   function groupMessagesByRequestId(msgs) {
-    const groups = new Map();
+    const groups = new SvelteMap();
 
     for (const msg of msgs) {
       const data = parseMessageData(msg);
@@ -361,10 +362,6 @@
 </div>
 
 <style>
-  :host {
-    --json-viewer-max-height: 400px;
-  }
-
   .container {
     font-family:
       -apple-system,

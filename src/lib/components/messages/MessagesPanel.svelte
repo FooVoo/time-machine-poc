@@ -112,7 +112,6 @@
   }
 
   .messages-list {
-    max-height: 400px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
